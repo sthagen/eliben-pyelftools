@@ -1,6 +1,34 @@
 Changelog
 =========
 
++ Version 0.27 (2020.10.27)
+
+  - Print addend wfor RELA relocations without symbol (#292)
+  - Implement symbol lookup for {GNU,}HashSection (#290)
+  - Major rewrite of expression parsing
+  - Cashed random access to CUs and DIEs (#264)
+  - GNU expressions (#303)
+  - Support parsing LSDA pointers from FDEs (#308)
+  - Add support for DWA_OP_GNU_push_tls_address in expressions (#315)
+  - Some initial support for AArch64 little-endian (#318)
+  - Support for ELF files with a large number of sections (#333)
+  - Some minimal support for DWARFv1 (#335)
+  - Many small bug fixes; see git log.
+
++ Version 0.26 (2019.12.05)
+
+  - Call relocation for ARM v3 (#194)
+  - More complete architecture coverage for ENUM_E_MACHINE (#206)
+  - Support for .debug_pubtypes and .debug_pubnames sections (#208)
+  - Support for DWARF v4 location lists (#214)
+  - Decode strings in dynamic string tables (#217)
+  - Improve symbol table handling in dynamic segments (#219)
+  - Improved handling of location information (#225)
+  - Avoid deprecation warnings in Python 3.7+
+  - Add DWARF v5 OPs (#240)
+  - Handle many new translation forms and constants
+  - Lazy DIE parsing to speed up partial parsing of DWARF info (#249)
+
 + Version 0.25 (2018.09.01)
 
   - Make parsing of SH_TYPE and PT_TYPE fields dependent on the machine

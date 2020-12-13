@@ -74,6 +74,10 @@ class Section(object):
         Note that data is decompressed if the stored section data is
         compressed.
         """
+        # If this section is NOBITS, there is no data. provide a dummy answer
+        if self.header['sh_type'] == 'SHT_NOBITS':
+            return b'\0'*self.data_size
+
         # If this section is compressed, deflate it
         if self.compressed:
             c_type = self._compression_type
@@ -137,7 +141,27 @@ class StringTableSection(Section):
         """
         table_offset = self['sh_offset']
         s = parse_cstring_from_stream(self.stream, table_offset + offset)
-        return s.decode('utf-8') if s else ''
+        return s.decode('utf-8', errors='replace') if s else ''
+
+
+class SymbolTableIndexSection(Section):
+    """ A section containing the section header table indices corresponding
+        to symbols in the linked symbol table. This section has to exist if the
+        symbol table contains an entry with a section header index set to
+        SHN_XINDEX (0xffff). The format of the section is described at
+        https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.sheader.html
+    """
+    def __init__(self, header, name, elffile, symboltable):
+        super(SymbolTableIndexSection, self).__init__(header, name, elffile)
+        self.symboltable = symboltable
+
+    def get_section_index(self, n):
+        """ Get the section header table index for the symbol with index #n.
+            The section contains an array of Elf32_word values with one entry
+            for every symbol in the associated symbol table.
+        """
+        return struct_parse(self.elffile.structs.Elf_word(''), self.stream,
+                            self['sh_offset'] + n * self['sh_entsize'])
 
 
 class SymbolTableSection(Section):
@@ -267,7 +291,7 @@ class StabSection(Section):
         while offset < end:
             stabs = struct_parse(
                 self.structs.Elf_Stabs,
-                self.elffile.stream,
+                self.stream,
                 stream_pos=offset)
             stabs['n_offset'] = offset
             offset += self.structs.Elf_Stabs.sizeof()
@@ -322,7 +346,7 @@ class ARMAttribute(object):
         return self._tag['tag']
 
     def __repr__(self):
-        s = '<ARMAttribute (%s): %r>' % (self.tag, self.value) 
+        s = '<ARMAttribute (%s): %r>' % (self.tag, self.value)
         s += ' %s' % self.extra if self.extra is not None else ''
         return s
 
@@ -370,7 +394,7 @@ class ARMAttributesSubsubsection(object):
             yield ARMAttribute(self.structs, self.stream)
 
     def __repr__(self):
-        s = "<ARMAttributesSubsubsection (%s): %d bytes>" 
+        s = "<ARMAttributesSubsubsection (%s): %d bytes>"
         return s % (self.header.tag[4:], self.header.value)
 
 

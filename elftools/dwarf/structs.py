@@ -195,12 +195,13 @@ class DWARFStructs(object):
             DW_FORM_strp=self.Dwarf_offset(''),
             DW_FORM_flag=self.Dwarf_uint8(''),
 
+            DW_FORM_ref=self.Dwarf_uint32(''),
             DW_FORM_ref1=self.Dwarf_uint8(''),
             DW_FORM_ref2=self.Dwarf_uint16(''),
             DW_FORM_ref4=self.Dwarf_uint32(''),
             DW_FORM_ref8=self.Dwarf_uint64(''),
             DW_FORM_ref_udata=self.Dwarf_uleb128(''),
-            DW_FORM_ref_addr=self.Dwarf_offset(''),
+            DW_FORM_ref_addr=self.Dwarf_target_addr('') if self.dwarf_version == 2 else self.Dwarf_offset(''),
 
             DW_FORM_indirect=self.Dwarf_uleb128(''),
 
@@ -228,7 +229,7 @@ class DWARFStructs(object):
         self.Dwarf_nameLUT_header = Struct("Dwarf_nameLUT_header",
             self.Dwarf_initial_length('unit_length'),
             self.Dwarf_uint16('version'),
-            self.Dwarf_offset('debug_info_offset'), 
+            self.Dwarf_offset('debug_info_offset'),
             self.Dwarf_length('debug_info_length')
             )
 

@@ -12,7 +12,7 @@ import logging
 from utils import run_exe, is_in_rootdir, dump_output_to_temp_files
 
 # Make it possible to run this file from the root dir of pyelftools without
-# installing pyelftools; useful for Travis testing, etc.
+# installing pyelftools; useful for CI testing, etc.
 sys.path[0:0] = ['.']
 
 # Create a global logger object
@@ -63,7 +63,7 @@ def run_example_and_compare(example_path):
         return True
     else:
         testlog.info('.......FAIL comparison')
-        dump_output_to_temp_files(testlog, example_out)
+        dump_output_to_temp_files(testlog, example_out, ref_str)
         return False
 
 

@@ -24,7 +24,7 @@ setup(
     description='Library for analyzing ELF files and DWARF debugging information',
     long_description=description,
     license='Public domain',
-    version='0.25',
+    version='0.27',
     author='Eli Bendersky',
     maintainer='Eli Bendersky',
     author_email='eliben@gmail.com',
@@ -41,6 +41,7 @@ setup(
         'elftools.elf',
         'elftools.common',
         'elftools.dwarf',
+        'elftools.ehabi',
         'elftools.construct', 'elftools.construct.lib',
         ],
 
