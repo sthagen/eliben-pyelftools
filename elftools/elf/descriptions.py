@@ -9,11 +9,11 @@
 from .enums import (
     ENUM_D_TAG, ENUM_E_VERSION, ENUM_P_TYPE_BASE, ENUM_SH_TYPE_BASE,
     ENUM_RELOC_TYPE_i386, ENUM_RELOC_TYPE_x64,
-    ENUM_RELOC_TYPE_ARM, ENUM_RELOC_TYPE_AARCH64, ENUM_RELOC_TYPE_MIPS,
-    ENUM_ATTR_TAG_ARM, ENUM_DT_FLAGS, ENUM_DT_FLAGS_1)
+    ENUM_RELOC_TYPE_ARM, ENUM_RELOC_TYPE_AARCH64, ENUM_RELOC_TYPE_PPC64,
+    ENUM_RELOC_TYPE_MIPS, ENUM_ATTR_TAG_ARM, ENUM_DT_FLAGS, ENUM_DT_FLAGS_1)
 from .constants import (
     P_FLAGS, RH_FLAGS, SH_FLAGS, SUNW_SYMINFO_FLAGS, VER_FLAGS)
-from ..common.py3compat import iteritems
+from ..common.py3compat import bytes2hex, iteritems
 
 
 def describe_ei_class(x):
@@ -35,7 +35,13 @@ def describe_ei_osabi(x):
     return _DESCR_EI_OSABI.get(x, _unknown)
 
 
-def describe_e_type(x):
+def describe_e_type(x, elffile=None):
+    if elffile is not None and x == 'ET_DYN':
+        # Detect whether this is a normal SO or a PIE executable
+        dynamic = elffile.get_section_by_name('.dynamic')
+        for t in dynamic.iter_tags('DT_FLAGS_1'):
+            if t.entry.d_val & ENUM_DT_FLAGS_1['DF_1_PIE']:
+                return 'DYN (Position-Independent Executable file)'
     return _DESCR_E_TYPE.get(x, _unknown)
 
 
@@ -84,7 +90,7 @@ def describe_sh_type(x):
         return _DESCR_SH_TYPE.get(x)
     elif (x >= ENUM_SH_TYPE_BASE['SHT_LOOS'] and
           x < ENUM_SH_TYPE_BASE['SHT_GNU_versym']):
-        return 'loos+%lx' % (x - ENUM_SH_TYPE_BASE['SHT_LOOS'])
+        return 'loos+0x%lx' % (x - ENUM_SH_TYPE_BASE['SHT_LOOS'])
     else:
         return _unknown
 
@@ -98,8 +104,9 @@ def describe_sh_flags(x):
             SH_FLAGS.SHF_GROUP, SH_FLAGS.SHF_TLS, SH_FLAGS.SHF_MASKOS,
             SH_FLAGS.SHF_EXCLUDE):
         s += _DESCR_SH_FLAGS[flag] if (x & flag) else ''
-    if x & SH_FLAGS.SHF_MASKPROC:
-        s += 'p'
+    if not x & SH_FLAGS.SHF_EXCLUDE:
+        if x & SH_FLAGS.SHF_MASKPROC:
+            s += 'p'
     return s
 
 
@@ -113,6 +120,17 @@ def describe_symbol_bind(x):
 
 def describe_symbol_visibility(x):
     return _DESCR_ST_VISIBILITY.get(x, _unknown)
+
+
+def describe_symbol_local(x):
+    return '[<localentry>: ' + str(1 << x) + ']'
+
+
+def describe_symbol_other(x):
+    vis = describe_symbol_visibility(x['visibility'])
+    if x['local'] > 1 and x['local'] < 7:
+        return vis + ' ' + describe_symbol_local(x['local'])
+    return vis
 
 
 def describe_symbol_shndx(x):
@@ -129,6 +147,8 @@ def describe_reloc_type(x, elffile):
         return _DESCR_RELOC_TYPE_ARM.get(x, _unknown)
     elif arch == 'AArch64':
         return _DESCR_RELOC_TYPE_AARCH64.get(x, _unknown)
+    elif arch == '64-bit PowerPC':
+        return _DESCR_RELOC_TYPE_PPC64.get(x, _unknown)
     elif arch == 'MIPS':
         return _DESCR_RELOC_TYPE_MIPS.get(x, _unknown)
     else:
@@ -179,7 +199,7 @@ def describe_note(x):
     desc = ''
     if x['n_type'] == 'NT_GNU_ABI_TAG':
         if x['n_name'] == 'Android':
-            desc = '\n   description data: %s ' % ' '.join("%02x" % ord(b) for b in x['n_descdata'])
+            desc = '\n   description data: %s ' % bytes2hex(x['n_descdata'])
         else:
             desc = '\n    OS: %s, ABI: %d.%d.%d' % (
                 _DESCR_NOTE_ABI_TAG_OS.get(n_desc['abi_os'], _unknown),
@@ -188,10 +208,10 @@ def describe_note(x):
         desc = '\n    Build ID: %s' % (n_desc)
     elif x['n_type'] == 'NT_GNU_GOLD_VERSION':
         desc = '\n    Version: %s' % (n_desc)
+    elif x['n_type'] == 'NT_GNU_PROPERTY_TYPE_0':
+        desc = '\n      Properties: ' + describe_note_gnu_properties(x['n_desc'])
     else:
-        desc = '\n    description data: {}'.format(' '.join(
-            '{:02x}'.format(ord(byte)) for byte in n_desc
-        ))
+        desc = '\n      description data: {}'.format(bytes2hex(n_desc))
 
     if x['n_type'] == 'NT_GNU_ABI_TAG' and x['n_name'] == 'Android':
         note_type = 'NT_VERSION'
@@ -232,6 +252,41 @@ def describe_attr_tag_arm(tag, val, extra):
         return _DESCR_ATTR_TAG_ARM[tag] + d_entry[val]
 
 
+def describe_note_gnu_property_x86_feature_1(value):
+    descs = []
+    for mask, desc in _DESCR_NOTE_GNU_PROPERTY_X86_FEATURE_1_FLAGS:
+        if value & mask:
+            descs.append(desc)
+    return 'x86 feature: ' + ', '.join(descs)
+
+def describe_note_gnu_properties(properties):
+    descriptions = []
+    for prop in properties:
+        t, d, sz = prop.pr_type, prop.pr_data, prop.pr_datasz
+        if t == 'GNU_PROPERTY_STACK_SIZE':
+            if type(d) is int:
+                prop_desc = 'stack size: 0x%x' % d
+            else:
+                prop_desc = 'stack size: <corrupt length: 0x%x>' % sz
+        elif t == 'GNU_PROPERTY_NO_COPY_ON_PROTECTED':
+            if sz != 0:
+                prop_desc = ' <corrupt length: 0x%x>' % sz
+            else:
+                prop_desc = 'no copy on protected'
+        elif t == 'GNU_PROPERTY_X86_FEATURE_1_AND':
+            if sz != 4:
+                prop_desc = ' <corrupt length: 0x%x>' % sz
+            else:
+                prop_desc = describe_note_gnu_property_x86_feature_1(d)
+        elif _DESCR_NOTE_GNU_PROPERTY_TYPE_LOPROC <= t <= _DESCR_NOTE_GNU_PROPERTY_TYPE_HIPROC:
+            prop_desc = '<processor-specific type 0x%x data: %s >' % (t, bytes2hex(d, sep=' '))
+        elif _DESCR_NOTE_GNU_PROPERTY_TYPE_LOUSER <= t <= _DESCR_NOTE_GNU_PROPERTY_TYPE_HIUSER:
+            prop_desc = '<application-specific type 0x%x data: %s >' % (t, bytes2hex(d, sep=' '))
+        else:
+            prop_desc = '<unknown type 0x%x data: %s >' % (t, bytes2hex(d, sep=' '))
+        descriptions.append(prop_desc)
+    return '\n        '.join(descriptions)
+
 #-------------------------------------------------------------------------------
 _unknown = '<unknown>'
 
@@ -271,6 +326,7 @@ _DESCR_EI_OSABI = dict(
     ELFOSABI_SORTIX='Sortix',
     ELFOSABI_ARM_AEABI='ARM - EABI',
     ELFOSABI_ARM='ARM - ABI',
+    ELFOSABI_CELL_LV2='CellOS Lv-2',
     ELFOSABI_STANDALONE='Standalone App',
 )
 
@@ -303,6 +359,7 @@ _DESCR_E_MACHINE = dict(
     EM_AARCH64='AArch64',
     EM_BLACKFIN='Analog Devices Blackfin',
     EM_PPC='PowerPC',
+    EM_PPC64='PowerPC64',
     RESERVED='RESERVED',
 )
 
@@ -318,6 +375,7 @@ _DESCR_P_TYPE = dict(
     PT_GNU_EH_FRAME='GNU_EH_FRAME',
     PT_GNU_STACK='GNU_STACK',
     PT_GNU_RELRO='GNU_RELRO',
+    PT_GNU_PROPERTY='GNU_PROPERTY',
     PT_ARM_ARCHEXT='ARM_ARCHEXT',
     PT_ARM_EXIDX='EXIDX',  # binutils calls this EXIDX, not ARM_EXIDX
     PT_AARCH64_ARCHEXT='AARCH64_ARCHEXT',
@@ -512,6 +570,7 @@ _DESCR_NOTE_N_TYPE = dict(
     NT_GNU_HWCAP='DSO-supplied software HWCAP info',
     NT_GNU_BUILD_ID='unique build ID bitstring',
     NT_GNU_GOLD_VERSION='gold version',
+    NT_GNU_PROPERTY_TYPE_0='program properties'
 )
 
 
@@ -524,6 +583,25 @@ _DESCR_NOTE_ABI_TAG_OS = dict(
     ELF_NOTE_OS_NETBSD='NetBSD',
     ELF_NOTE_OS_SYLLABLE='Syllable',
 )
+
+
+# Values in GNU .note.gnu.property notes (n_type=='NT_GNU_PROPERTY_TYPE_0') have
+# different formats which need to be parsed/described differently
+_DESCR_NOTE_GNU_PROPERTY_TYPE_LOPROC=0xc0000000
+_DESCR_NOTE_GNU_PROPERTY_TYPE_HIPROC=0xdfffffff
+_DESCR_NOTE_GNU_PROPERTY_TYPE_LOUSER=0xe0000000
+_DESCR_NOTE_GNU_PROPERTY_TYPE_HIUSER=0xffffffff
+
+
+# Bit masks for GNU_PROPERTY_X86_FEATURE_1_xxx flags in the form
+# (mask, flag_description) in the desired output order
+_DESCR_NOTE_GNU_PROPERTY_X86_FEATURE_1_FLAGS = (
+    (1, 'IBT'),
+    (2, 'SHSTK'),
+    (4, 'LAM_U48'),
+    (8, 'LAM_U57'),
+)
+
 
 def _reverse_dict(d, low_priority=()):
     """
@@ -545,6 +623,7 @@ _DESCR_RELOC_TYPE_i386 = _reverse_dict(ENUM_RELOC_TYPE_i386)
 _DESCR_RELOC_TYPE_x64 = _reverse_dict(ENUM_RELOC_TYPE_x64)
 _DESCR_RELOC_TYPE_ARM = _reverse_dict(ENUM_RELOC_TYPE_ARM)
 _DESCR_RELOC_TYPE_AARCH64 = _reverse_dict(ENUM_RELOC_TYPE_AARCH64)
+_DESCR_RELOC_TYPE_PPC64 = _reverse_dict(ENUM_RELOC_TYPE_PPC64)
 _DESCR_RELOC_TYPE_MIPS = _reverse_dict(ENUM_RELOC_TYPE_MIPS)
 
 _low_priority_D_TAG = (

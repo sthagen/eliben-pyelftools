@@ -11,9 +11,11 @@ from ..construct import (
     UBInt8, UBInt16, UBInt32, UBInt64,
     ULInt8, ULInt16, ULInt32, ULInt64,
     SBInt32, SLInt32, SBInt64, SLInt64,
-    Struct, Array, Enum, Padding, BitStruct, BitField, Value, String, CString
+    Struct, Array, Enum, Padding, BitStruct, BitField, Value, String, CString,
+    Switch, Field
     )
 from ..common.construct_utils import ULEB128
+from ..common.utils import roundup
 from .enums import *
 
 
@@ -102,6 +104,7 @@ class ELFStructs(object):
         self._create_gnu_verdef()
         self._create_gnu_versym()
         self._create_gnu_abi()
+        self._create_gnu_property()
         self._create_note(e_type)
         self._create_stabs()
         self._create_arm_attributes()
@@ -289,7 +292,10 @@ class ELFStructs(object):
         # st_other is hierarchical. To access the visibility,
         # use container['st_other']['visibility']
         st_other_struct = BitStruct('st_other',
-            Padding(5),
+            # https://openpowerfoundation.org/wp-content/uploads/2016/03/ABI64BitOpenPOWERv1.1_16July2015_pub4.pdf
+            # See 3.4.1 Symbol Values.
+            Enum(BitField('local', 3), **ENUM_ST_LOCAL),
+            Padding(2),
             Enum(BitField('visibility', 3), **ENUM_ST_VISIBILITY))
         if self.elfclass == 32:
             self.Elf_Sym = Struct('Elf_Sym',
@@ -368,8 +374,50 @@ class ELFStructs(object):
             self.Elf_word('abi_tiny'),
         )
 
+    def _create_gnu_property(self):
+        # Structure of GNU property notes is documented in
+        # https://github.com/hjl-tools/linux-abi/wiki/linux-abi-draft.pdf
+        def roundup_padding(ctx):
+            if self.elfclass == 32:
+                return roundup(ctx.pr_datasz, 2) - ctx.pr_datasz
+            return roundup(ctx.pr_datasz, 3) - ctx.pr_datasz
+
+        def classify_pr_data(ctx):
+            if type(ctx.pr_type) is not str:
+                return None
+            if ctx.pr_type.startswith('GNU_PROPERTY_X86_'):
+                return ('GNU_PROPERTY_X86_*', 4, 0)
+            return (ctx.pr_type, ctx.pr_datasz, self.elfclass)
+
+        self.Elf_Prop = Struct('Elf_Prop',
+            Enum(self.Elf_word('pr_type'), **ENUM_NOTE_GNU_PROPERTY_TYPE),
+            self.Elf_word('pr_datasz'),
+            Switch('pr_data', classify_pr_data, {
+                    ('GNU_PROPERTY_STACK_SIZE', 4, 32): self.Elf_word('pr_data'),
+                    ('GNU_PROPERTY_STACK_SIZE', 8, 64): self.Elf_word64('pr_data'),
+                    ('GNU_PROPERTY_X86_*', 4, 0): self.Elf_word('pr_data'),
+                },
+                default=Field('pr_data', lambda ctx: ctx.pr_datasz)
+            ),
+            Padding(roundup_padding)
+        )
+
     def _create_note(self, e_type=None):
         # Structure of "PT_NOTE" section
+
+        self.Elf_ugid = self.Elf_half if self.elfclass == 32 and self.e_machine in {
+            'EM_MN10300',
+            'EM_ARM',
+            'EM_CRIS',
+            'EM_CYGNUS_FRV',
+            'EM_386',
+            'EM_M32R',
+            'EM_68K',
+            'EM_S390',
+            'EM_SH',
+            'EM_SPARC',
+        } else self.Elf_word
+
         self.Elf_Nhdr = Struct('Elf_Nhdr',
             self.Elf_word('n_namesz'),
             self.Elf_word('n_descsz'),
@@ -387,12 +435,12 @@ class ELFStructs(object):
                 self.Elf_byte('pr_zomb'),
                 self.Elf_byte('pr_nice'),
                 self.Elf_xword('pr_flag'),
-                self.Elf_half('pr_uid'),
-                self.Elf_half('pr_gid'),
-                self.Elf_half('pr_pid'),
-                self.Elf_half('pr_ppid'),
-                self.Elf_half('pr_pgrp'),
-                self.Elf_half('pr_sid'),
+                self.Elf_ugid('pr_uid'),
+                self.Elf_ugid('pr_gid'),
+                self.Elf_word('pr_pid'),
+                self.Elf_word('pr_ppid'),
+                self.Elf_word('pr_pgrp'),
+                self.Elf_word('pr_sid'),
                 String('pr_fname', 16),
                 String('pr_psargs', 80),
             )
@@ -404,8 +452,8 @@ class ELFStructs(object):
                 self.Elf_byte('pr_nice'),
                 Padding(4),
                 self.Elf_xword('pr_flag'),
-                self.Elf_word('pr_uid'),
-                self.Elf_word('pr_gid'),
+                self.Elf_ugid('pr_uid'),
+                self.Elf_ugid('pr_gid'),
                 self.Elf_word('pr_pid'),
                 self.Elf_word('pr_ppid'),
                 self.Elf_word('pr_pgrp'),

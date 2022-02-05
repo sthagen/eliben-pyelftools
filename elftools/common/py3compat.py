@@ -21,6 +21,11 @@ if PY3:
     # and strings are different types and bytes hold numeric values when
     # iterated over.
 
+    def bytes2hex(b, sep=''):
+        if not sep:
+            return b.hex()
+        return sep.join(map('{:02x}'.format, b))
+
     def bytes2str(b): return b.decode('latin-1')
     def str2bytes(s): return s.encode('latin-1')
     def int2byte(i): return bytes((i,))
@@ -40,6 +45,12 @@ if PY3:
 else:
     import cStringIO
     StringIO = BytesIO = cStringIO.StringIO
+
+    def bytes2hex(b, sep=''):
+        res = b.encode('hex')
+        if not sep:
+            return res
+        return sep.join(res[i:i+2] for i in range(0, len(res), 2))
 
     def bytes2str(b): return b
     def str2bytes(s): return s
