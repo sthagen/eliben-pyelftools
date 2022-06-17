@@ -63,10 +63,21 @@ from elftools.dwarf.descriptions import (
 from elftools.dwarf.constants import (
     DW_LNS_copy, DW_LNS_set_file, DW_LNE_define_file)
 from elftools.dwarf.locationlists import LocationParser, LocationEntry, LocationViewPair, BaseAddressEntry
+from elftools.dwarf.ranges import RangeEntry # ranges.BaseAddressEntry collides with the one above
+import elftools.dwarf.ranges
 from elftools.dwarf.callframe import CIE, FDE, ZERO
 from elftools.ehabi.ehabiinfo import CorruptEHABIEntry, CannotUnwindEHABIEntry, GenericEHABIEntry
 from elftools.dwarf.enums import ENUM_DW_UT
 
+def _get_cu_base(cu):
+    top_die = cu.get_top_DIE()
+    attr = top_die.attributes
+    if 'DW_AT_low_pc' in attr:
+        return attr['DW_AT_low_pc'].value
+    elif 'DW_AT_entry_pc' in attr:
+        return attr['DW_AT_entry_pc'].value
+    else:
+        raise ValueError("Can't find the base IP (low_pc) for a CU")
 
 class ReadElf(object):
     """ display_* methods are used to emit output into the output stream
@@ -859,6 +870,8 @@ class ReadElf(object):
             self._dump_debug_namelut(dump_what)
         elif dump_what == 'loc':
             self._dump_debug_locations()
+        elif dump_what == 'Ranges':
+            self._dump_debug_ranges()
         else:
             self._emitline('debug dump not yet supported for "%s"' % dump_what)
 
@@ -1129,14 +1142,11 @@ class ReadElf(object):
 
             cu_filename = bytes2str(lineprogram['file_entry'][0].name)
             if len(lineprogram['include_directory']) > 0:
-                dir_index = lineprogram['file_entry'][0].dir_index
-                if dir_index > 0:
-                    dir = lineprogram['include_directory'][dir_index - 1]
-                else:
-                    dir = b'.'
-                cu_filename = '%s/%s' % (bytes2str(dir), cu_filename)
+                # GNU readelf 2.38 only outputs directory in wide mode
+                self._emitline('%s:' % cu_filename)
+            else:
+                self._emitline('CU: %s:' % cu_filename)
 
-            self._emitline('CU: %s:' % cu_filename)
             self._emitline('File name                            Line number    Starting address    Stmt')
             # GNU readelf has a View column that we don't try to replicate
             # The autotest has logic in place to ignore that
@@ -1429,16 +1439,6 @@ class ReadElf(object):
     def _dump_debug_locations(self):
         """ Dump the location lists from .debug_loc/.debug_loclists section
         """
-        def _get_cu_base(cu):
-            top_die = cu.get_top_DIE()
-            attr = top_die.attributes
-            if 'DW_AT_low_pc' in attr:
-                return attr['DW_AT_low_pc'].value
-            elif 'DW_AT_entry_pc' in attr:
-                return attr['DW_AT_entry_pc'].value
-            else:
-                raise ValueError("Can't find the base IP (low_pc) for a CU")
-
         di = self._dwarfinfo
         loc_lists = di.location_lists()
         if not loc_lists: # No locations section - readelf outputs nothing
@@ -1482,19 +1482,19 @@ class ReadElf(object):
                     self._emitline("    %08x v%015x v%015x location view pair" % (entry.entry_offset, entry.begin, entry.end))
                 else:
                     if in_views:
-                        in_views = False             
+                        in_views = False
                         self._emitline("")
- 
+
                     # Need the CU for this loclist, but the map is keyed by the offset
                     # of the first entry in the loclist. Got to skip the views first.
                     if cu is None:
                         cu = cu_map.get(entry.entry_offset, False)
                         if not cu:
-                            raise ValueError("Location list can't be tracked to a CU")                        
+                            raise ValueError("Location list can't be tracked to a CU")
 
                     if isinstance(entry, LocationEntry):
                         if base_ip is None and not entry.is_absolute:
-                            base_ip = _get_cu_base(cu)                                
+                            base_ip = _get_cu_base(cu)
 
                         begin_offset = (0 if entry.is_absolute else base_ip) + entry.begin_offset
                         end_offset = (0 if entry.is_absolute else base_ip) + entry.end_offset
@@ -1529,6 +1529,58 @@ class ReadElf(object):
             # but readelf emits its offset, so this should too.
             last = loc_list[-1]
             self._emitline("    %08x <End of list>" % (last.entry_offset + last.entry_length))
+
+    def _dump_debug_ranges(self):
+        # TODO: GNU readelf format doesn't need entry_length?
+        di = self._dwarfinfo
+        range_lists = di.range_lists()
+        if not range_lists: # No ranges section - readelf outputs nothing
+            return
+
+        ver5 = range_lists.version >= 5
+        range_lists = list(range_lists.iter_range_lists())
+        if len(range_lists) == 0:
+            # Present but empty locations section - readelf outputs a message
+            self._emitline("\nSection '%s' has no debugging data." % (di.debug_rnglists_sec or di.debug_ranges_sec).name)
+            return
+
+        # In order to determine the base address of the range
+        # We need to know the corresponding CU.
+        cu_map = {die.attributes['DW_AT_ranges'].value : cu  # Range list offset => CU
+            for cu in di.iter_CUs()
+            for die in cu.iter_DIEs()
+            if 'DW_AT_ranges' in die.attributes}
+
+        addr_size = di.config.default_address_size # In bytes, 4 or 8
+        addr_width = addr_size * 2 # In hex digits, 8 or 16
+        line_template = "    %%08x %%0%dx %%0%dx %%s" % (addr_width, addr_width)
+        base_template = "    %%08x %%0%dx (base address)" % (addr_width)
+
+        self._emitline('Contents of the %s section:\n' % (di.debug_rnglists_sec or di.debug_ranges_sec).name)
+        self._emitline('    Offset   Begin    End')
+
+        for range_list in range_lists:
+            # Weird discrepancy in binutils: for DWARFv5 it outputs entry offset,
+            # for DWARF<=4 list offset.
+            first = range_list[0]
+            base_ip = _get_cu_base(cu_map[first.entry_offset])
+            for entry in range_list:
+                if isinstance(entry, RangeEntry):
+                    postfix = ' (start == end)' if entry.begin_offset == entry.end_offset else ''
+                    self._emitline(line_template % (
+                        entry.entry_offset if ver5 else first.entry_offset,
+                        (0 if entry.is_absolute else base_ip) + entry.begin_offset,
+                        (0 if entry.is_absolute else base_ip) + entry.end_offset,
+                        postfix))
+                elif isinstance(entry, elftools.dwarf.ranges.BaseAddressEntry):
+                    base_ip = entry.base_address
+                    self._emitline(base_template % (
+                        entry.entry_offset if ver5 else first.entry_offset,
+                        entry.base_address))
+                else:
+                    raise NotImplementedError("Unknown object in a range list")
+            last = range_list[-1]
+            self._emitline('    %08x <End of list>' % (last.entry_offset + last.entry_length if ver5 else first.entry_offset))
 
     def _display_arch_specific_arm(self):
         """ Display the ARM architecture-specific info contained in the file.
@@ -1620,7 +1672,7 @@ def main(stream=None):
             action='store', dest='debug_dump_what', metavar='<what>',
             help=(
                 'Display the contents of DWARF debug sections. <what> can ' +
-                'one of {info,decodedline,frames,frames-interp,aranges,pubtypes,pubnames,loc}'))
+                'one of {info,decodedline,frames,frames-interp,aranges,pubtypes,pubnames,loc,Ranges}'))
     argparser.add_argument('--traceback',
                            action='store_true', dest='show_traceback',
                            help='Dump the Python traceback on ELFError'
