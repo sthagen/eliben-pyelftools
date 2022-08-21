@@ -76,8 +76,13 @@ class DWARFStructs(object):
 
         See also the documentation of public methods.
     """
-    def __init__(self,
-                 little_endian, dwarf_format, address_size, dwarf_version=2):
+
+    # Cache for structs instances based on creation parameters. Structs
+    # initialization is expensive and we don't won't to repeat it
+    # unnecessarily.
+    _structs_cache = {}
+
+    def __new__(cls, little_endian, dwarf_format, address_size, dwarf_version=2):
         """ dwarf_version:
                 Numeric DWARF version
 
@@ -91,6 +96,12 @@ class DWARFStructs(object):
                 Target machine address size, in bytes (4 or 8). (See spec
                 section 7.5.1)
         """
+        key = (little_endian, dwarf_format, address_size, dwarf_version)
+
+        if key in cls._structs_cache:
+            return cls._structs_cache[key]
+
+        self = super().__new__(cls)
         assert dwarf_format == 32 or dwarf_format == 64
         assert address_size == 8 or address_size == 4, str(address_size)
         self.little_endian = little_endian
@@ -98,6 +109,8 @@ class DWARFStructs(object):
         self.address_size = address_size
         self.dwarf_version = dwarf_version
         self._create_structs()
+        cls._structs_cache[key] = self
+        return self
 
     def initial_length_field_size(self):
         """ Size of an initial length field.
@@ -225,6 +238,7 @@ class DWARFStructs(object):
             DW_FORM_data2=self.Dwarf_uint16(''),
             DW_FORM_data4=self.Dwarf_uint32(''),
             DW_FORM_data8=self.Dwarf_uint64(''),
+            DW_FORM_data16=Array(16, self.Dwarf_uint8('')), # Used for hashes and such, not for integers
             DW_FORM_sdata=self.Dwarf_sleb128(''),
             DW_FORM_udata=self.Dwarf_uleb128(''),
 
@@ -262,7 +276,7 @@ class DWARFStructs(object):
 
             # New forms in DWARFv5
             DW_FORM_loclistx=self.Dwarf_uleb128(''),
-            DW_FORM_rnglistx=self.Dwarf_uleb128('')            
+            DW_FORM_rnglistx=self.Dwarf_uleb128('')
         )
 
     def _create_aranges_header(self):
