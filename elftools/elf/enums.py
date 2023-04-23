@@ -255,8 +255,9 @@ ENUM_E_MACHINE = dict(
     EM_MOXIE         = 223, # Moxie processor family
     EM_AMDGPU        = 224, # AMD GPU architecture
     EM_RISCV         = 243, # RISC-V
-    EM_BPF           = 247,	# Linux BPF - in-kernel virtual machine
-    EM_CSKY          = 252,	# C-SKY
+    EM_BPF           = 247, # Linux BPF - in-kernel virtual machine
+    EM_CSKY          = 252, # C-SKY
+    EM_LOONGARCH     = 258, # LoongArch
     EM_FRV           = 0x5441, # Fujitsu FR-V
     # Reservations
     # reserved  11-14   Reserved for future use
@@ -817,6 +818,16 @@ ENUM_RELOC_TYPE_x64 = dict(
     R_X86_64_REX_GOTPCRELX=42,
     R_X86_64_GNU_VTINHERIT=250,
     R_X86_64_GNU_VTENTRY=251,
+    _default_=Pass,
+)
+
+ENUM_RELOC_TYPE_BPF = dict(
+    R_BPF_NONE=0,
+    R_BPF_64_64=1,
+    R_BPF_64_ABS64=2,
+    R_BPF_64_ABS32=3,
+    R_BPF_64_NODYLD32=4,
+    R_BPF_64_32=10,
     _default_=Pass,
 )
 
