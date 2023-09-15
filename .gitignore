@@ -8,6 +8,8 @@ dist
 MANIFEST
 *.sublime-workspace
 *.egg-info
+.vscode
+temp
 
 
 

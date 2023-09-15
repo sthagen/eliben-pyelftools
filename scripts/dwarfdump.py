@@ -14,7 +14,7 @@
 # This code is in the public domain
 #-------------------------------------------------------------------------------
 import argparse
-import os, sys, posixpath
+import os, sys
 import traceback
 
 # For running from development directory. It should take precedence over the
@@ -147,13 +147,13 @@ def _desc_decl_file(attr, die):
         if dir_index >= 0:
             dir = bytes2str(includes[dir_index])
             if dir.startswith('.'):
-                dir = posixpath.join(_cu_comp_dir(cu), dir)
+                dir = os.path.join(_cu_comp_dir(cu), dir)
         else:
             dir = _cu_comp_dir(cu)
         file_name = bytes2str(file_entry.name)
     else:
         raise DWARFError("Invalid source filename entry index in a decl_file attribute")
-    return "\"%s\"" % (posixpath.join(dir, file_name),)
+    return "\"%s\"" % (os.path.join(dir, file_name),)
 
 
 def _desc_ranges(attr, die):
@@ -342,7 +342,7 @@ class ReadElf(object):
         self.elffile = ELFFile(file)
         self.output = output
         self._dwarfinfo = self.elffile.get_dwarf_info()
-        arches = {"EM_386": "i386", "EM_X86_64": "x86-64", "EM_ARM": "littlearm", "EM_AARCH64": "littleaarch64", "EM_LOONGARCH64": "loongarch64", "EM_RISCV": "littleriscv", "EM_MIPS": "mips"}
+        arches = {"EM_386": "i386", "EM_X86_64": "x86-64", "EM_ARM": "littlearm", "EM_AARCH64": "littleaarch64", "EM_LOONGARCH": "loongarch", "EM_RISCV": "littleriscv", "EM_MIPS": "mips"}
         arch = arches[self.elffile['e_machine']]
         bits = self.elffile.elfclass
         self._emitline("%s:	file format elf%d-%s" % (filename, bits, arch))
