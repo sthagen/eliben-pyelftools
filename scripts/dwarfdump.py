@@ -14,7 +14,8 @@
 # This code is in the public domain
 #-------------------------------------------------------------------------------
 import argparse
-import os, sys
+import os
+import sys
 import traceback
 
 # For running from development directory. It should take precedence over the
@@ -25,12 +26,12 @@ from elftools import __version__
 from elftools.common.exceptions import DWARFError, ELFError
 from elftools.common.utils import bytes2str
 from elftools.elf.elffile import ELFFile
-from elftools.dwarf.locationlists import LocationParser, LocationEntry, LocationExpr, LocationViewPair, BaseAddressEntry as LocBaseAddressEntry
+from elftools.dwarf.locationlists import LocationParser, LocationEntry, LocationExpr, BaseAddressEntry as LocBaseAddressEntry
 from elftools.dwarf.ranges import RangeEntry # ranges.BaseAddressEntry collides with the one above
 import elftools.dwarf.ranges
 from elftools.dwarf.enums import *
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp
-from elftools.dwarf.datatype_cpp import DIE_name, describe_cpp_datatype
+from elftools.dwarf.datatype_cpp import describe_cpp_datatype
 from elftools.dwarf.descriptions import describe_reg_name
 
 # ------------------------------
@@ -220,10 +221,10 @@ def _desc_operationarg(s, cu):
     elif isinstance(s, int):
         return hex(s)
     elif isinstance(s, list): # Could be a blob (list of ints), could be a subexpression
-        if len(s) > 0 and isinstance(s[0], DWARFExprOp): # Subexpression
+        if s and isinstance(s[0], DWARFExprOp): # Subexpression
             return '(' + '; '.join(_desc_operation(op.op, op.op_name, op.args, cu) for op in s) + ')'
         else:
-            return " ".join((hex(len(s)),) + tuple("0x%02x" % b for b in s))
+            return " ".join((hex(len(s)), *("0x%02x" % b for b in s)))
 
 def _arch(cu):
     return cu.dwarfinfo.config.machine_arch
@@ -337,7 +338,7 @@ ATTR_DESCRIPTIONS = dict(
     DW_AT_GNU_call_site_value=lambda attr, die: _desc_expression(attr.value, die) if attr.form.startswith('DW_FORM_block') else _desc_locations(attr, die),
 )
 
-class ReadElf(object):
+class ReadElf:
     """ dump_xxx is used to dump the respective section.
     Mimics the output of dwarfdump with --verbose
     """

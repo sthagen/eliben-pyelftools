@@ -6,7 +6,10 @@
 # Eli Bendersky (eliben@gmail.com)
 # This code is in the public domain
 #-------------------------------------------------------------------------------
-import os, sys, subprocess, tempfile
+import os
+import sys
+import subprocess
+import tempfile
 
 
 def run_exe(exe_path, args=[], echo=False):
@@ -14,7 +17,7 @@ def run_exe(exe_path, args=[], echo=False):
         list of arguments. Captures its return code (rc) and stdout and
         returns a pair: rc, stdout_str
     """
-    popen_cmd = [exe_path] + args
+    popen_cmd = [exe_path, *args]
     if os.path.splitext(exe_path)[1] == '.py':
         popen_cmd.insert(0, sys.executable)
     if echo:

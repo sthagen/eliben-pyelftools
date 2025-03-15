@@ -19,7 +19,7 @@ from ..common.utils import roundup
 from .enums import *
 
 
-class ELFStructs(object):
+class ELFStructs:
     """ Accessible attributes:
 
             Elf_{byte|half|word|word64|addr|offset|sword|xword|xsword}:
@@ -273,7 +273,7 @@ class ELFStructs(object):
                               self.Elf_addr('r_offset'),
                               *fields)
 
-        fields_and_addend = fields + [self.Elf_sxword('r_addend')]
+        fields_and_addend = [*fields, self.Elf_sxword('r_addend')]
         self.Elf_Rela = Struct('Elf_Rela',
                                self.Elf_addr('r_offset'),
                                *fields_and_addend

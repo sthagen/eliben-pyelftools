@@ -40,7 +40,7 @@ LineProgramEntry = namedtuple(
     'LineProgramEntry', 'command is_extended args state')
 
 
-class LineState(object):
+class LineState:
     """ Represents a line program state (or a "row" in the matrix
         describing debug location information for addresses).
         The instance variables of this class are the "state machine registers"
@@ -61,16 +61,20 @@ class LineState(object):
         self.discriminator = 0
 
     def __repr__(self):
-        a = ['<LineState %x:' % id(self)]
-        a.append('  address = 0x%x' % self.address)
-        for attr in ('file', 'line', 'column', 'is_stmt', 'basic_block',
-                     'end_sequence', 'prologue_end', 'epilogue_begin', 'isa',
-                     'discriminator'):
-            a.append('  %s = %s' % (attr, getattr(self, attr)))
-        return '\n'.join(a) + '>\n'
+        return '\n'.join((
+            '<LineState %x:' % id(self),
+            '  address = 0x%x' % self.address,
+            *(
+                '  %s = %s' % (attr, getattr(self, attr))
+                for attr in ('file', 'line', 'column', 'is_stmt', 'basic_block',
+                    'end_sequence', 'prologue_end', 'epilogue_begin', 'isa',
+                    'discriminator')
+            ),
+            '>',
+        ))
 
 
-class LineProgram(object):
+class LineProgram:
     """ Builds a "line table", which is essentially the matrix described
         in section 6.2 of DWARFv3. It's a list of LineState objects,
         sorted by increasing address, so it can be used to obtain the

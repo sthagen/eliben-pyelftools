@@ -7,8 +7,9 @@
 # This code is in the public domain
 #-------------------------------------------------------------------------------
 
-import os, binascii
-from ..construct.macros import UBInt32, UBInt64, ULInt32, ULInt64, Array
+import os
+import binascii
+from ..construct.macros import Array
 from ..common.exceptions import DWARFError
 from ..common.utils import preserve_stream_pos, struct_parse
 
@@ -67,7 +68,7 @@ def _file_crc32(file):
     """
     d = file.read(4096)
     checksum = 0
-    while len(d):
+    while d:
         checksum = binascii.crc32(d, checksum)
         d = file.read(4096)
     return checksum

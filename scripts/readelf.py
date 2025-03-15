@@ -8,9 +8,8 @@
 # This code is in the public domain
 #-------------------------------------------------------------------------------
 import argparse
-import os, sys
+import sys
 import re
-import string
 import traceback
 import itertools
 
@@ -23,7 +22,7 @@ from elftools import __version__
 from elftools.common.exceptions import ELFError
 from elftools.common.utils import bytes2str, iterbytes
 from elftools.elf.elffile import ELFFile
-from elftools.elf.dynamic import DynamicSection, DynamicSegment
+from elftools.elf.dynamic import DynamicSection
 from elftools.elf.enums import ENUM_D_TAG
 from elftools.elf.segments import InterpSegment
 from elftools.elf.sections import (
@@ -39,8 +38,7 @@ from elftools.elf.descriptions import (
     describe_ei_osabi, describe_e_type, describe_e_machine,
     describe_e_version_numeric, describe_p_type, describe_p_flags,
     describe_rh_flags, describe_sh_type, describe_sh_flags,
-    describe_symbol_type, describe_symbol_bind, describe_symbol_visibility,
-    describe_symbol_shndx, describe_reloc_type, describe_dyn_tag,
+    describe_symbol_type, describe_symbol_bind, describe_symbol_shndx, describe_reloc_type, describe_dyn_tag,
     describe_dt_flags, describe_dt_flags_1, describe_ver_flags, describe_note,
     describe_attr_tag_arm, describe_attr_tag_riscv, describe_symbol_other
     )
@@ -48,7 +46,6 @@ from elftools.elf.constants import E_FLAGS
 from elftools.elf.constants import E_FLAGS_MASKS
 from elftools.elf.constants import SH_FLAGS
 from elftools.elf.constants import SHN_INDICES
-from elftools.dwarf.dwarfinfo import DWARFInfo
 from elftools.dwarf.descriptions import (
     describe_reg_name, describe_attr_value, set_global_machine_arch,
     describe_CFI_instructions, describe_CFI_register_rule,
@@ -97,7 +94,7 @@ _CONTROL_CHAR_RE = re.compile(r'[\x01-\x1f]')
 def _format_symbol_name(s):
     return _CONTROL_CHAR_RE.sub(lambda match: '^' + chr(0x40 + ord(match[0])), s)
 
-class ReadElf(object):
+class ReadElf:
     """ display_* methods are used to emit output into the output stream
     """
     def __init__(self, file, output):
@@ -1260,10 +1257,8 @@ class ReadElf(object):
                 continue 
 
             lineprogram_list.append(lineprogram)
-            ver5 = lineprogram.header.version >= 5
-
             cu_filename = bytes2str(lineprogram['file_entry'][0].name)
-            if len(lineprogram['include_directory']) > 0:
+            if lineprogram['include_directory']:
                 # GNU readelf 2.38 only outputs directory in wide mode
                 self._emitline('%s:' % cu_filename)
             else:
@@ -1394,7 +1389,7 @@ class ReadElf(object):
             section = self._dwarfinfo.debug_pubtypes_sec
 
         # readelf prints nothing if the section is not present.
-        if namelut is None or len(namelut) == 0:
+        if not namelut:
             return
 
         self._emitline('Contents of the %s section:' % section.name)
@@ -1428,7 +1423,7 @@ class ReadElf(object):
         # dumps them, so we should too.
         unordered_entries = aranges_table._get_entries(need_empty=True)
 
-        if len(unordered_entries) == 0:
+        if not unordered_entries:
             self._emitline()
             self._emitline("Section '.debug_aranges' has no debugging data.")
             return
@@ -1505,7 +1500,7 @@ class ReadElf(object):
 
             # Decode the table.
             decoded_table = entry.get_decoded()
-            if len(decoded_table.table) == 0:
+            if not decoded_table.table:
                 continue
 
             # Print the heading row for the decoded table
@@ -1521,7 +1516,7 @@ class ReadElf(object):
             # DWARF register number is not greater than other GPRs.)
             decoded_table = entry.get_decoded()
             reg_order = sorted(decoded_table.reg_order)
-            if len(decoded_table.reg_order):
+            if decoded_table.reg_order:
                 # Headings for the registers
                 for regnum in reg_order:
                     if regnum == ra_regnum:
@@ -1602,7 +1597,7 @@ class ReadElf(object):
         line_template = "    %%08x %%0%dx %%0%dx %%s%%s" % (addr_width, addr_width)
 
         loc_lists = list(loc_lists_sec.iter_location_lists())
-        if len(loc_lists) == 0:
+        if not loc_lists:
             # Present but empty locations section - readelf outputs a message
             self._emitline("\nSection '%s' has no debugging data." % (section_name,))
             return
@@ -1703,7 +1698,7 @@ class ReadElf(object):
         self._emitline('  Address size:    %d' % cu.address_size)
         self._emitline('  Segment size:    %d' % cu.segment_selector_size)
         self._emitline('  Offset entries:  %d\n' % cu.offset_count)
-        if cu.offsets and len(cu.offsets):
+        if cu.offsets:
             self._emitline('  Offsets starting at 0x%x:' % cu.offset_table_offset)
             for i_offset in enumerate(cu.offsets):
                 self._emitline('    [%6d] 0x%x' % i_offset)        
@@ -1728,7 +1723,7 @@ class ReadElf(object):
         self._emitline('  Address size:    %d' % cu.address_size)
         self._emitline('  Segment size:    %d' % cu.segment_selector_size)
         self._emitline('  Offset entries:  %d\n' % cu.offset_count)
-        if cu.offsets and len(cu.offsets):
+        if cu.offsets:
             self._emitline('  Offsets starting at 0x%x:' % cu.offset_table_offset)
             for i_offset in enumerate(cu.offsets):
                 self._emitline('    [%6d] 0x%x' % i_offset)
@@ -1755,7 +1750,7 @@ class ReadElf(object):
         next_rcu_offset = 0
 
         range_lists = list(range_lists_sec.iter_range_lists())
-        if len(range_lists) == 0:
+        if not range_lists:
             # Present but empty ranges section - readelf outputs a message
             self._emitline("\nSection '%s' has no debugging data." % section_name)
             return
