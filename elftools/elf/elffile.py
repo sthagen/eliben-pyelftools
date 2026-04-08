@@ -37,7 +37,7 @@ class ELFFile:
         contents of an ELF file.
 
         Optionally, a stream_loader function can be passed as the second
-        argument. This stream_loader function takes a relative file path to
+        argument. This stream_loader function takes a relative string path to
         load a supplementary object file, and returns a stream suitable for
         creating a new ELFFile. Currently, the only such relative file path is
         obtained from the supplementary object files.
@@ -90,26 +90,38 @@ class ELFFile:
 
     @classmethod
     def load_from_path(cls, path):
-        """Takes a path to a file on the local filesystem, and returns an
-        ELFFile from it, setting up a correct stream_loader relative to the
-        original file.
+        """Takes a local filesystem path accepted by open(), and returns an
+        ELFFile from it, setting up a stream_loader that resolves linked files
+        using normalized string paths relative to the original file.
         """
         stream = open(path, 'rb')
-        return ELFFile(stream, ELFFile.make_relative_loader(path))
+        return ELFFile(stream, ELFFile.make_relative_loader(os.fsdecode(path)))
 
     @staticmethod
     def make_relative_loader(base_path):
         """ Return a function that takes a potentially relative path,
-            resolves it against base_path (bytes or str), and opens a file at that.
+            resolves it against base_path (str), and opens a file at that.
 
-            ELFFile uses functions like that for resolving DWARF links.
+            ELFFile uses functions like that for resolving DWARF links. The
+            raw bytes parsed from ELF metadata are decoded before calling this
+            loader.
         """
-        if isinstance(base_path, str):
-            base_path = base_path.encode('UTF-8') # resolver takes a bytes path
-        base_directory = os.path.dirname(base_path)
+        if not isinstance(base_path, str):
+            raise TypeError('base_path must be str')
+        base_directory = os.path.realpath(os.path.dirname(base_path))
         def loader(rel_path):
-            if not os.path.isabs(rel_path):
-                rel_path = os.path.join(base_directory, rel_path)
+            if not isinstance(rel_path, str):
+                raise TypeError('rel_path must be str')
+
+            if os.path.isabs(rel_path):
+                raise ELFError('External DWARF path must be relative to the ELF file directory.')
+
+            rel_path = os.path.realpath(os.path.join(base_directory, rel_path))
+            # Resolve ".." segments and symlinks before checking that the final
+            # target still lives under the ELF file's directory.
+            if os.path.commonpath([base_directory, rel_path]) != base_directory:
+                raise ELFError('External DWARF path escapes the ELF file directory.')
+
             return open(rel_path, 'rb')
         return loader
 
@@ -281,7 +293,7 @@ class ELFFile:
         debuglink_section = self.get_section_by_name('.gnu_debuglink')
         if debuglink_section and not self.has_dwarf_info(True) and follow_links and self.stream_loader:
             debuglink = struct_parse(self.structs.Gnu_debuglink, debuglink_section.stream, debuglink_section.header.sh_offset)
-            with self.stream_loader(debuglink.filename) as ext_file:
+            with self.stream_loader(os.fsdecode(debuglink.filename)) as ext_file:
                 # Validate checksum...
                 if _file_crc32(ext_file) != debuglink.checksum:
                     raise ELFError('The linked DWARF file does not match the checksum in the link.')
@@ -379,7 +391,7 @@ class ELFFile:
         """
         supfilepath = dwarfinfo.parse_debugsupinfo()
         if supfilepath is not None and self.stream_loader is not None:
-            stream = self.stream_loader(supfilepath)
+            stream = self.stream_loader(os.fsdecode(supfilepath))
             supelffile = ELFFile(stream)
             dwarf_info = supelffile.get_dwarf_info()
             stream.close()
