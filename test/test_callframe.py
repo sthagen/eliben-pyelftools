@@ -8,8 +8,9 @@ import unittest
 from io import BytesIO
 
 from elftools.dwarf.callframe import (
-    CallFrameInfo, CIE, FDE, instruction_name, CallFrameInstruction,
+    CallFrameInfo, CIE, FDE, CallFrameInstruction,
     RegisterRule, DecodedCallFrameTable, CFARule)
+from elftools.dwarf.constants import DW_CFA
 from elftools.dwarf.structs import DWARFStructs
 from elftools.dwarf.descriptions import (describe_CFI_instructions,
     set_global_machine_arch)
@@ -19,54 +20,52 @@ from os.path import join
 
 
 class TestCallFrame(unittest.TestCase):
-    def assertInstruction(self, instr, name, args):
+    def assertInstruction(self, instr, op, args):
         self.assertIsInstance(instr, CallFrameInstruction)
-        self.assertEqual(instruction_name(instr.opcode), name)
+        self.assertEqual(instr.opcode, op)
         self.assertEqual(instr.args, args)
 
     def test_spec_sample_d6(self):
         # D.6 sample in DWARFv3
-        s = BytesIO()
-        data = (b'' +
+        s = BytesIO(
             # first comes the CIE
-            b'\x20\x00\x00\x00' +        # length
-            b'\xff\xff\xff\xff' +        # CIE_id
-            b'\x03\x00\x04\x7c' +        # version, augmentation, caf, daf
-            b'\x08' +                    # return address
-            b'\x0c\x07\x00' +
-            b'\x08\x00' +
-            b'\x07\x01' +
-            b'\x07\x02' +
-            b'\x07\x03' +
-            b'\x08\x04' +
-            b'\x08\x05' +
-            b'\x08\x06' +
-            b'\x08\x07' +
-            b'\x09\x08\x01' +
-            b'\x00' +
+            b'\x20\x00\x00\x00'        # length
+            b'\xff\xff\xff\xff'        # CIE_id
+            b'\x03\x00\x04\x7c'        # version, augmentation, caf, daf
+            b'\x08'                    # return address
+            b'\x0c\x07\x00'
+            b'\x08\x00'
+            b'\x07\x01'
+            b'\x07\x02'
+            b'\x07\x03'
+            b'\x08\x04'
+            b'\x08\x05'
+            b'\x08\x06'
+            b'\x08\x07'
+            b'\x09\x08\x01'
+            b'\x00'
 
             # then comes the FDE
-            b'\x28\x00\x00\x00' +        # length
-            b'\x00\x00\x00\x00' +        # CIE_pointer (to CIE at 0)
-            b'\x44\x33\x22\x11' +        # initial_location
-            b'\x54\x00\x00\x00' +        # address range
-            b'\x41' +
-            b'\x0e\x0c' + b'\x41' +
-            b'\x88\x01' + b'\x41' +
-            b'\x86\x02' + b'\x41' +
-            b'\x0d\x06' + b'\x41' +
-            b'\x84\x03' + b'\x4b' +
-            b'\xc4' + b'\x41' +
-            b'\xc6' +
-            b'\x0d\x07' + b'\x41' +
-            b'\xc8' + b'\x41' +
-            b'\x0e\x00' +
+            b'\x28\x00\x00\x00'        # length
+            b'\x00\x00\x00\x00'        # CIE_pointer (to CIE at 0)
+            b'\x44\x33\x22\x11'        # initial_location
+            b'\x54\x00\x00\x00'        # address range
+            b'\x41'
+            b'\x0e\x0c' b'\x41'
+            b'\x88\x01' b'\x41'
+            b'\x86\x02' b'\x41'
+            b'\x0d\x06' b'\x41'
+            b'\x84\x03' b'\x4b'
+            b'\xc4' b'\x41'
+            b'\xc6'
+            b'\x0d\x07' b'\x41'
+            b'\xc8' b'\x41'
+            b'\x0e\x00'
             b'\x00\x00'
             )
-        s.write(data)
 
         structs = DWARFStructs(little_endian=True, dwarf_format=32, address_size=4)
-        cfi = CallFrameInfo(s, len(data), 0, structs)
+        cfi = CallFrameInfo(s, len(s.getbuffer()), 0, structs)
         entries = cfi.get_entries()
 
         self.assertEqual(len(entries), 2)
@@ -76,11 +75,11 @@ class TestCallFrame(unittest.TestCase):
         self.assertEqual(entries[0]['return_address_register'], 8)
         self.assertEqual(len(entries[0].instructions), 11)
         self.assertInstruction(entries[0].instructions[0],
-            'DW_CFA_def_cfa', [7, 0])
+            DW_CFA.def_cfa, [7, 0])
         self.assertInstruction(entries[0].instructions[8],
-            'DW_CFA_same_value', [7])
+            DW_CFA.same_value, [7])
         self.assertInstruction(entries[0].instructions[9],
-            'DW_CFA_register', [8, 1])
+            DW_CFA.register, [8, 1])
 
         self.assertTrue(isinstance(entries[1], FDE))
         self.assertEqual(entries[1]['length'], 40)
@@ -90,15 +89,15 @@ class TestCallFrame(unittest.TestCase):
         self.assertIs(entries[1].cie, entries[0])
         self.assertEqual(len(entries[1].instructions), 21)
         self.assertInstruction(entries[1].instructions[0],
-            'DW_CFA_advance_loc', [1])
+            DW_CFA.advance_loc, [1])
         self.assertInstruction(entries[1].instructions[1],
-            'DW_CFA_def_cfa_offset', [12])
+            DW_CFA.def_cfa_offset, [12])
         self.assertInstruction(entries[1].instructions[9],
-            'DW_CFA_offset', [4, 3])
+            DW_CFA.offset, [4, 3])
         self.assertInstruction(entries[1].instructions[18],
-            'DW_CFA_def_cfa_offset', [0])
+            DW_CFA.def_cfa_offset, [0])
         self.assertInstruction(entries[1].instructions[20],
-            'DW_CFA_nop', [])
+            DW_CFA.nop, [])
 
         # Now let's decode it...
         decoded_CIE = entries[0].get_decoded()
@@ -131,22 +130,21 @@ class TestCallFrame(unittest.TestCase):
 
     def test_describe_CFI_instructions(self):
         # The data here represents a single CIE
-        data = (b'' +
-            b'\x16\x00\x00\x00' +        # length
-            b'\xff\xff\xff\xff' +        # CIE_id
-            b'\x03\x00\x04\x7c' +        # version, augmentation, caf, daf
-            b'\x08' +                    # return address
-            b'\x0c\x07\x02' +
+        s = BytesIO(
+            b'\x16\x00\x00\x00'        # length
+            b'\xff\xff\xff\xff'        # CIE_id
+            b'\x03\x00\x04\x7c'        # version, augmentation, caf, daf
+            b'\x08'                    # return address
+            b'\x0c\x07\x02'
             b'\x10\x02\x07\x03\x01\x02\x00\x00\x06\x06')
-        s = BytesIO(data)
 
         structs = DWARFStructs(little_endian=True, dwarf_format=32, address_size=4)
-        cfi = CallFrameInfo(s, len(data), 0, structs)
+        cfi = CallFrameInfo(s, len(s.getbuffer()), 0, structs)
         entries = cfi.get_entries()
 
         set_global_machine_arch('x86')
         self.assertEqual(describe_CFI_instructions(entries[0]),
-            (   '  DW_CFA_def_cfa: r7 (edi) ofs 2\n' +
+            (   '  DW_CFA_def_cfa: r7 (edi) ofs 2\n'
                 '  DW_CFA_expression: r2 (edx) (DW_OP_addr: 201; DW_OP_deref; DW_OP_deref)\n'))
 
     def test_CFIEntry_get_decoded(self):
@@ -172,39 +170,38 @@ class TestCallFrame(unittest.TestCase):
     def test_ehframe_fde_with_lsda_pointer(self):
         # CIE and FDE dumped from exceptions_0, offset 0xcc0
         # binary is at https://github.com/angr/binaries/blob/master/tests/x86_64/exceptions_0
-        data = (b'' +
+        s = BytesIO(
             # CIE
-            b'\x1c\x00\x00\x00' +       # length
-            b'\x00\x00\x00\x00' +       # ID
-            b'\x01' +                   # version
-            b'\x7a\x50\x4c\x52\x00' +   # augmentation string
-            b'\x01' +                   # code alignment
-            b'\x78' +                   # data alignment
-            b'\x10' +                   # return address register
-            b'\x07' +                   # augmentation data length
-            b'\x9b' +                   # personality function pointer encoding
-            b'\x3d\x13\x20\x00' +       # personality function pointer
-            b'\x1b' +                   # LSDA pointer encoding
-            b'\x1b' +                   # FDE encoding
-            b'\x0c\x07\x08\x90' +       # initial instructions
-            b'\x01\x00\x00' +
+            b'\x1c\x00\x00\x00'       # length
+            b'\x00\x00\x00\x00'       # ID
+            b'\x01'                   # version
+            b'\x7a\x50\x4c\x52\x00'   # augmentation string
+            b'\x01'                   # code alignment
+            b'\x78'                   # data alignment
+            b'\x10'                   # return address register
+            b'\x07'                   # augmentation data length
+            b'\x9b'                   # personality function pointer encoding
+            b'\x3d\x13\x20\x00'       # personality function pointer
+            b'\x1b'                   # LSDA pointer encoding
+            b'\x1b'                   # FDE encoding
+            b'\x0c\x07\x08\x90'       # initial instructions
+            b'\x01\x00\x00'
             # FDE
-            b'\x24\x00\x00\x00' +       # length
-            b'\x24\x00\x00\x00' +       # CIE reference pointer
-            b'\x62\xfd\xff\xff' +       # pc begin
-            b'\x89\x00\x00\x00' +       # pc range
-            b'\x04' +                   # augmentation data length
-            b'\xb7\x00\x00\x00' +       # LSDA pointer
-            b'\x41\x0e\x10\x86' +       # initial instructions
-            b'\x02\x43\x0d\x06' +
-            b'\x45\x83\x03\x02' +
-            b'\x7f\x0c\x07\x08' +
+            b'\x24\x00\x00\x00'       # length
+            b'\x24\x00\x00\x00'       # CIE reference pointer
+            b'\x62\xfd\xff\xff'       # pc begin
+            b'\x89\x00\x00\x00'       # pc range
+            b'\x04'                   # augmentation data length
+            b'\xb7\x00\x00\x00'       # LSDA pointer
+            b'\x41\x0e\x10\x86'       # initial instructions
+            b'\x02\x43\x0d\x06'
+            b'\x45\x83\x03\x02'
+            b'\x7f\x0c\x07\x08'
             b'\x00\x00\x00'
             )
-        s = BytesIO(data)
 
         structs = DWARFStructs(little_endian=True, dwarf_format=32, address_size=8)
-        cfi = CallFrameInfo(s, len(data), 0, structs, for_eh_frame=True)
+        cfi = CallFrameInfo(s, len(s.getbuffer()), 0, structs, for_eh_frame=True)
         entries = cfi.get_entries()
 
         self.assertEqual(len(entries), 2)

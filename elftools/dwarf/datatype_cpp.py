@@ -29,7 +29,7 @@ def parse_cpp_datatype(var_die):
     """
     t = TypeDesc()
 
-    if not 'DW_AT_type' in var_die.attributes:
+    if 'DW_AT_type' not in var_die.attributes:
         t.tag = ''
         return t
 
@@ -40,7 +40,7 @@ def parse_cpp_datatype(var_die):
     while type_die.tag in ('DW_TAG_const_type', 'DW_TAG_volatile_type', 'DW_TAG_pointer_type', 'DW_TAG_reference_type'):
         modifier = _strip_type_tag(type_die) # const/volatile/reference/pointer
         mods.insert(0, modifier)
-        if not 'DW_AT_type' in type_die.attributes: # void* is encoded as a pointer to nothing
+        if 'DW_AT_type' not in type_die.attributes: # void* is encoded as a pointer to nothing
             t.name = t.tag = "void"
             t.modifiers = tuple(mods)
             return t
@@ -98,8 +98,8 @@ def parse_cpp_datatype(var_die):
 
     # Check the nesting - important for parameters
     parent = type_die.get_parent()
-    scopes = list()
-    while parent.tag in ('DW_TAG_class_type', 'DW_TAG_structure_type', 'DW_TAG_union_type', 'DW_TAG_namespace'):
+    scopes = []
+    while parent and parent.tag in ('DW_TAG_class_type', 'DW_TAG_structure_type', 'DW_TAG_union_type', 'DW_TAG_namespace'):
         scopes.insert(0, safe_DIE_name(parent, _strip_type_tag(parent) + " "))
         # If unnamed scope, fall back to scope type - like "structure "
         parent = parent.get_parent()
@@ -199,7 +199,7 @@ def get_class_spec_if_member(func_spec, the_func):
     parent = func_spec.get_parent()
 
     scopes = []
-    while parent.tag in ("DW_TAG_class_type", "DW_TAG_structure_type", "DW_TAG_namespace"):
+    while parent and parent.tag in ("DW_TAG_class_type", "DW_TAG_structure_type", "DW_TAG_namespace"):
         scopes.insert(0, DIE_name(parent))
         parent = parent.get_parent()
     if scopes:
@@ -224,7 +224,7 @@ def DIE_is_ptr_to_member_struct(type_die):
 
 def _strip_type_tag(die):
     """Given a DIE with DW_TAG_foo_type, returns foo"""
-    if isinstance(die.tag, int): # User-defined tag
+    if not isinstance(die.tag, str): # User-defined tag
         return ""
     return die.tag[7:-5]
 
