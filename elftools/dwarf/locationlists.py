@@ -7,15 +7,37 @@
 # This code is in the public domain
 #-------------------------------------------------------------------------------
 import os
-from collections import namedtuple
+from typing import NamedTuple
+
 from ..common.exceptions import DWARFError
 from ..common.utils import struct_parse
 from .dwarf_util import _iter_CUs_in_section
 
-LocationExpr = namedtuple('LocationExpr', 'loc_expr')
-LocationEntry = namedtuple('LocationEntry', 'entry_offset entry_length begin_offset end_offset loc_expr is_absolute')
-BaseAddressEntry = namedtuple('BaseAddressEntry', 'entry_offset entry_length base_address')
-LocationViewPair = namedtuple('LocationViewPair', 'entry_offset begin end')
+
+class LocationExpr(NamedTuple):
+    loc_expr: list[int]
+
+
+class LocationEntry(NamedTuple):
+    entry_offset: int
+    entry_length: int
+    begin_offset: int
+    end_offset: int
+    loc_expr: list[int]
+    is_absolute: bool
+
+
+class BaseAddressEntry(NamedTuple):
+    entry_offset: int
+    entry_length: int
+    base_address: int
+
+
+class LocationViewPair(NamedTuple):
+    entry_offset: int
+    begin: int
+    end: int
+
 
 def _translate_startx_length(e, cu):
     start_offset = cu.dwarfinfo.get_addr(cu, e.start_index)
@@ -92,10 +114,12 @@ class LocationLists:
         Passing the die is only neccessary in DWARF5+, for decoding
         location entry encodings that contain references to other sections.
         """
-        if self.version >= 5 and die is None:
-            raise DWARFError("For this binary, \"die\" needs to be provided")
         self.stream.seek(offset, os.SEEK_SET)
-        return self._parse_location_list_from_stream_v5(die.cu) if self.version >= 5 else self._parse_location_list_from_stream()
+        if self.version >= 5:
+            if die is None:
+                raise DWARFError("For this binary, \"die\" needs to be provided")
+            return self._parse_location_list_from_stream_v5(die.cu)
+        return self._parse_location_list_from_stream()
 
     def iter_location_lists(self):
         """ Iterates through location lists and view pairs. Returns lists of
@@ -151,8 +175,7 @@ class LocationLists:
                             list_offset = attr.value
                             all_offsets.add(list_offset)
                             cu_map[list_offset] = cu
-        all_offsets = list(all_offsets)
-        all_offsets.sort()
+        sorted_offsets = sorted(all_offsets)
 
         if ver5:
             # Loclists section is organized as an array of CUs, each length prefixed.
@@ -172,7 +195,7 @@ class LocationLists:
 
                 while stream.tell() < cu_end_offset:
                     # Skip the gap to the next object
-                    next_offset = all_offsets[offset_index]
+                    next_offset = sorted_offsets[offset_index]
                     if next_offset == stream.tell(): # At an object, either a loc list or a loc view pair
                         locview_pairs = self._parse_locview_pairs(locviews)
                         entries = self._parse_location_list_from_stream_v5(cu_map[stream.tell()])
@@ -183,7 +206,7 @@ class LocationLists:
                             next_offset = cu_end_offset # And implicitly quit the loop within the CU
                         stream.seek(next_offset, os.SEEK_SET)
         else:
-            for offset in all_offsets:
+            for offset in sorted_offsets:
                 list_offset = locviews.get(offset, offset)
                 if cu_map[list_offset].header.version < 5:
                     stream.seek(offset, os.SEEK_SET)
