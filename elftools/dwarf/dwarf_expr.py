@@ -9,7 +9,7 @@
 from io import BytesIO
 from typing import Any, NamedTuple
 
-from ..common.utils import struct_parse, read_blob
+from ..common.utils import struct_parse
 from ..common.exceptions import DWARFError
 
 
@@ -100,7 +100,7 @@ DW_OP_name2opcode = dict(
     DW_OP_hi_user=0xff,
 )
 
-def _generate_dynamic_values(map, prefix, index_start, index_end, value_start):
+def _generate_dynamic_values(map: dict[str, int], prefix: str, index_start: int, index_end: int, value_start: int) -> None:
     """ Generate values in a map (dict) dynamically. Each key starts with
         a (string) prefix, followed by an index in the inclusive range
         [index_start, index_end]. The values start at value_start.
@@ -138,7 +138,7 @@ class DWARFExprParser:
         self._dispatch_table = _init_dispatch_table(structs)
 
     def parse_expr(self, expr):
-        """ Parses expr (a list of integers) into a list of DWARFExprOp.
+        """ Parses expr (bytes or a list of integers) into a list of DWARFExprOp.
 
         The list can potentially be nested.
         """
@@ -194,24 +194,24 @@ def _init_dispatch_table(structs):
     # ULEB128, then an expression of that length
     def parse_nestedexpr():
         def parse(stream):
-            size = struct_parse(structs.the_Dwarf_uleb128, stream)
-            nested_expr_blob = read_blob(stream, size)
+            size: int = struct_parse(structs.the_Dwarf_uleb128, stream)
+            nested_expr_blob = stream.read(size)
             return [DWARFExprParser(structs).parse_expr(nested_expr_blob)]
         return parse
 
     # ULEB128, then a blob of that size
     def parse_blob():
-        return lambda stream: [read_blob(stream, struct_parse(structs.the_Dwarf_uleb128, stream))]
+        return lambda stream: [list(stream.read(struct_parse(structs.the_Dwarf_uleb128, stream)))]
 
     # ULEB128 with datatype DIE offset, then byte, then a blob of that size
     def parse_typedblob():
-        return lambda stream: [struct_parse(structs.the_Dwarf_uleb128, stream), read_blob(stream, struct_parse(structs.the_Dwarf_uint8, stream))]
+        return lambda stream: [struct_parse(structs.the_Dwarf_uleb128, stream), list(stream.read(struct_parse(structs.the_Dwarf_uint8, stream)))]
 
     # https://yurydelendik.github.io/webassembly-dwarf/
     # Byte, then variant: 0, 1, 2 => uleb128, 3 => uint32
     def parse_wasmloc():
         def parse(stream):
-            op = struct_parse(structs.the_Dwarf_uint8, stream)
+            op: int = struct_parse(structs.the_Dwarf_uint8, stream)
             if 0 <= op <= 2:
                 return [op, struct_parse(structs.the_Dwarf_uleb128, stream)]
             elif op == 3:
