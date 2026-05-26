@@ -6,8 +6,21 @@
 # Yann Rouillard (yann@pleiades.fr.eu.org)
 # This code is in the public domain
 #------------------------------------------------------------------------------
+from __future__ import annotations
+
+from functools import cached_property
+from typing import TYPE_CHECKING, Any
+
 from ..common.utils import struct_parse, elf_assert
 from .sections import Section, Symbol
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from ..construct.core import Struct
+    from ..construct.lib.container import Container
+    from .elffile import ELFFile
+    from .sections import StringTableSection, SymbolTableSection
 
 
 class Version:
@@ -23,11 +36,11 @@ class Version:
         Similarly to Section objects, allows dictionary-like access to
         verdef/verneed entry
     """
-    def __init__(self, entry, name=None):
+    def __init__(self, entry: Container, name: str | None = None) -> None:
         self.entry = entry
         self.name = name
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str) -> Any:
         """ Implement dict-like access to entry
         """
         return self.entry[name]
@@ -40,11 +53,11 @@ class VersionAuxiliary:
         Similarly to Section objects, allows dictionary-like access to the
         verdaux/vernaux entry
     """
-    def __init__(self, entry, name):
+    def __init__(self, entry: Container, name: str) -> None:
         self.entry = entry
         self.name = name
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str) -> Any:
         """ Implement dict-like access to entries
         """
         return self.entry[name]
@@ -55,8 +68,16 @@ class GNUVersionSection(Section):
         sections class which contains shareable code
     """
 
-    def __init__(self, header, name, elffile, stringtable,
-                 field_prefix, version_struct, version_auxiliaries_struct):
+    def __init__(
+        self,
+        header: Container,
+        name: str,
+        elffile: ELFFile,
+        stringtable: StringTableSection,
+        field_prefix: str,
+        version_struct: Struct,
+        version_auxiliaries_struct: Struct,
+    ) -> None:
         super().__init__(header, name, elffile)
         self.stringtable = stringtable
         self.field_prefix = field_prefix
@@ -68,14 +89,18 @@ class GNUVersionSection(Section):
         """
         return self['sh_info']
 
-    def _field_name(self, name, auxiliary=False):
+    def _field_name(self, name: str, auxiliary: bool = False) -> str:
         """ Return the real field's name of version or a version auxiliary
             entry
         """
         middle = 'a_' if auxiliary else '_'
         return self.field_prefix + middle + name
 
-    def _iter_version_auxiliaries(self, entry_offset, count):
+    def _iter_version_auxiliaries(
+        self,
+        entry_offset: int,
+        count: int,
+    ) -> Iterator[VersionAuxiliary]:
         """ Yield all auxiliary entries of a version entry
         """
         name_field = self._field_name('name', auxiliary=True)
@@ -93,7 +118,7 @@ class GNUVersionSection(Section):
 
             entry_offset += entry[next_field]
 
-    def iter_versions(self):
+    def iter_versions(self) -> Iterator[tuple[Version, Iterator[VersionAuxiliary]]]:
         """ Yield all the version entries in the section
             Each time it returns the main version structure
             and an iterator to walk through its auxiliaries entries
@@ -128,33 +153,38 @@ class GNUVerNeedSection(GNUVersionSection):
     """ ELF SUNW or GNU Version Needed table section.
         Has an associated StringTableSection that's passed in the constructor.
     """
-    def __init__(self, header, name, elffile, stringtable):
+    def __init__(
+        self,
+        header: Container,
+        name: str,
+        elffile: ELFFile,
+        stringtable: StringTableSection,
+    ) -> None:
         super().__init__(
                 header, name, elffile, stringtable, 'vn',
                 elffile.structs.Elf_Verneed, elffile.structs.Elf_Vernaux)
-        self._has_indexes: bool | None = None
 
     def has_indexes(self) -> bool:
         """ Return True if at least one version definition entry has an index
             that is stored in the vna_other field.
             This information is used for symbol versioning
         """
-        if self._has_indexes is None:
-            self._has_indexes = False
-            for _, vernaux_iter in self.iter_versions():
-                for vernaux in vernaux_iter:
-                    if vernaux['vna_other']:
-                        self._has_indexes = True
-                        break
-
         return self._has_indexes
 
-    def iter_versions(self):
+    @cached_property
+    def _has_indexes(self) -> bool:
+        return any(
+            vernaux['vna_other']
+            for _, vernaux_iter in self.iter_versions()
+            for vernaux in vernaux_iter
+        )
+
+    def iter_versions(self) -> Iterator[tuple[Version, Iterator[VersionAuxiliary]]]:
         for verneed, vernaux in super().iter_versions():
             verneed.name = self.stringtable.get_string(verneed['vn_file'])
             yield verneed, vernaux
 
-    def get_version(self, index):
+    def get_version(self, index: int) -> tuple[Version, VersionAuxiliary] | None:
         """ Get the version information located at index #n in the table
             Return boths the verneed structure and the vernaux structure
             that contains the name of the version
@@ -171,12 +201,18 @@ class GNUVerDefSection(GNUVersionSection):
     """ ELF SUNW or GNU Version Definition table section.
         Has an associated StringTableSection that's passed in the constructor.
     """
-    def __init__(self, header, name, elffile, stringtable):
+    def __init__(
+        self,
+        header: Container,
+        name: str,
+        elffile: ELFFile,
+        stringtable: StringTableSection,
+    ) -> None:
         super().__init__(
                 header, name, elffile, stringtable, 'vd',
                 elffile.structs.Elf_Verdef, elffile.structs.Elf_Verdaux)
 
-    def get_version(self, index):
+    def get_version(self, index: int) -> tuple[Version, Iterator[VersionAuxiliary]] | None:
         """ Get the version information located at index #n in the table
             Return boths the verdef structure and an iterator to retrieve
             both the version names and dependencies in the form of
@@ -193,7 +229,13 @@ class GNUVerSymSection(Section):
     """ ELF SUNW or GNU Versym table section.
         Has an associated SymbolTableSection that's passed in the constructor.
     """
-    def __init__(self, header, name, elffile, symboltable):
+    def __init__(
+            self,
+            header: Container,
+            name: str,
+            elffile: ELFFile,
+            symboltable: SymbolTableSection,
+    ) -> None:
         super().__init__(header, name, elffile)
         self.symboltable = symboltable
 
@@ -202,7 +244,7 @@ class GNUVerSymSection(Section):
         """
         return self['sh_size'] // self['sh_entsize']
 
-    def get_symbol(self, n):
+    def get_symbol(self, n: int) -> Symbol:
         """ Get the symbol at index #n from the table (Symbol object)
             It begins at 1 and not 0 since the first entry is used to
             store the current version of the syminfo table
@@ -217,7 +259,7 @@ class GNUVerSymSection(Section):
         name = self.symboltable.get_symbol(n).name
         return Symbol(entry, name)
 
-    def iter_symbols(self):
+    def iter_symbols(self) -> Iterator[Symbol]:
         """ Yield all the symbols in the table
         """
         for i in range(self.num_symbols()):
