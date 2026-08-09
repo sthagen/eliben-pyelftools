@@ -8,12 +8,12 @@
 #-------------------------------------------------------------------------------
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from typing import IO, TYPE_CHECKING, Any, TypeVar, overload
 
-from .exceptions import ELFParseError, ELFError, DWARFError
 from ..construct import ConstructError
-import os
+from .exceptions import DWARFError, ELFError, ELFParseError
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 
 def merge_dicts(*dicts: Mapping[_K, _V]) -> dict[_K, _V]:
-    "Given any number of dicts, merges them into a new one."""
+    """Given any number of dicts, merges them into a new one."""
     result: dict[_K, _V] = {}
     for d in dicts:
         result.update(d)

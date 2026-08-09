@@ -4,11 +4,12 @@
 # Yann Rouillard (yann@pleiades.fr.eu.org)
 # This code is in the public domain
 #------------------------------------------------------------------------------
-import unittest
 import os
+import unittest
+from typing import ClassVar
 
-from elftools.elf.elffile import ELFFile
 from elftools.elf.dynamic import DynamicSection, DynamicTag
+from elftools.elf.elffile import ELFFile
 
 
 class TestDoubleDynstrSections(unittest.TestCase):
@@ -17,7 +18,7 @@ class TestDoubleDynstrSections(unittest.TestCase):
         sections are present in an elf file
     """
 
-    reference_data = [
+    reference_data: ClassVar = [
         'libz.so.1',
         'libc.so.6',
         'lib_versioned.so.1',

@@ -11,8 +11,8 @@ from __future__ import annotations
 import os
 from typing import IO, TYPE_CHECKING, NamedTuple, NoReturn
 
-from ..common.utils import struct_parse
 from ..common.exceptions import DWARFError
+from ..common.utils import struct_parse
 from .dwarf_util import _iter_CUs_in_section
 
 if TYPE_CHECKING:
@@ -224,9 +224,9 @@ class RangeLists:
     ) -> list[RangeEntry | BaseAddressEntry]:
         if self.version >= 5:
             assert cu is not None
-            return list(entry_translate[entry.entry_type](entry, cu)
+            return [entry_translate[entry.entry_type](entry, cu)
                 for entry
-                in struct_parse(self.structs.Dwarf_rnglists_entries, self.stream))
+                in struct_parse(self.structs.Dwarf_rnglists_entries, self.stream)]
         else:
             lst: list[RangeEntry | BaseAddressEntry] = []
             while True:

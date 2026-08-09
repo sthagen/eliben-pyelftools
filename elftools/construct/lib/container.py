@@ -23,8 +23,11 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "Container",
+    "FlagsContainer",
+    "LazyContainer",
+    "ListContainer",
     "recursion_lock",
-    "Container", "FlagsContainer", "ListContainer", "LazyContainer",
 ]
 
 
@@ -104,10 +107,10 @@ class Container(MutableMapping[str, Any]):
     __copy__ = copy
 
     def __repr__(self) -> str:
-        return "%s(%s)" % (self.__class__.__name__, repr(self.__dict__))
+        return f"{self.__class__.__name__}({self.__dict__!r})"
 
     def __str__(self) -> str:
-        return "%s(%s)" % (self.__class__.__name__, str(self.__dict__))
+        return f"{self.__class__.__name__}({self.__dict__!s})"
 
     if TYPE_CHECKING:
         # elftools.construct.debug Probe.printout()
@@ -128,9 +131,9 @@ class FlagsContainer(Container):
 
     @recursion_lock("<...>")
     def __str__(self) -> str:
-        d = dict((k, self[k]) for k in self
-                 if self[k] and not k.startswith("_"))
-        return "%s(%s)" % (self.__class__.__name__, pformat(d))
+        d = {k: self[k] for k in self
+                 if self[k] and not k.startswith("_")}
+        return f"{self.__class__.__name__}({pformat(d)})"
 
 class ListContainer(list[Any]):
     """
@@ -145,7 +148,7 @@ class ListContainer(list[Any]):
 
 class LazyContainer:
 
-    __slots__ = ("subcon", "stream", "pos", "context", "_value")
+    __slots__ = ("_value", "context", "pos", "stream", "subcon")
 
     def __init__(self, subcon: Construct, stream: IO[bytes], pos: int, context: Container) -> None:
         self.subcon = subcon
@@ -170,7 +173,7 @@ class LazyContainer:
             text = self._value.__pretty_str__(nesting, indentation)
         else:
             text = str(self._value)
-        return "%s: %s" % (self.__class__.__name__, text)
+        return f"{self.__class__.__name__}: {text}"
 
     def read(self) -> Any:
         self.stream.seek(self.pos)

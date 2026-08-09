@@ -3,14 +3,39 @@ from __future__ import annotations
 from sys import maxsize
 from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
-from .lib import (BitStreamReader, BitStreamWriter, Container, encode_bin,
-    decode_bin)
-from .core import (Struct, MetaField, StaticField, FormatField,
-    OnDemand, Pointer, Switch, Value, RepeatUntil, MetaArray, Sequence, Range,
-    Select, Pass, SizeofError, Buffered, Restream, Reconfig)
-from .adapters import (BitIntegerAdapter, PaddingAdapter,
-    ConstAdapter, CStringAdapter, LengthValueAdapter, IndexingAdapter,
-    PaddedStringAdapter, FlagsAdapter, StringAdapter, MappingAdapter)
+from .adapters import (
+    BitIntegerAdapter,
+    ConstAdapter,
+    CStringAdapter,
+    FlagsAdapter,
+    IndexingAdapter,
+    LengthValueAdapter,
+    MappingAdapter,
+    PaddedStringAdapter,
+    PaddingAdapter,
+    StringAdapter,
+)
+from .core import (
+    Buffered,
+    FormatField,
+    MetaArray,
+    MetaField,
+    OnDemand,
+    Pass,
+    Pointer,
+    Range,
+    Reconfig,
+    RepeatUntil,
+    Restream,
+    Select,
+    Sequence,
+    SizeofError,
+    StaticField,
+    Struct,
+    Switch,
+    Value,
+)
+from .lib import BitStreamReader, BitStreamWriter, Container, decode_bin, encode_bin
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable, Mapping
@@ -24,23 +49,68 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    "Field", "BitField", "Padding", "Flag",
-    "Bit", "Nibble", "Octet",
-    "UBInt8", "UBInt16", "UBInt32", "UBInt64",
-    "SBInt8", "SBInt16", "SBInt32", "SBInt64",
-    "ULInt8", "ULInt16", "ULInt32", "ULInt64",
-    "SLInt8", "SLInt16", "SLInt32", "SLInt64",
-    "UNInt8", "UNInt16", "UNInt32", "UNInt64",
-    "SNInt8", "SNInt16", "SNInt32", "SNInt64",
-    "BFloat32", "LFloat32", "NFloat32",
-    "BFloat64", "LFloat64", "NFloat64",
-    "Array", "PrefixedArray", "OpenRange", "GreedyRange", "OptionalGreedyRange",
-    "Optional", "Bitwise", "Aligned", "SeqOfOne", "Embedded", "Rename", "Alias",
-    "SymmetricMapping", "Enum", "FlagsEnum",
-    "AlignedStruct", "BitStruct", "EmbeddedBitStruct",
-    "String", "PascalString", "CString",
-    "IfThenElse", "If",
-    "OnDemandPointer", "Magic",
+    "Alias",
+    "Aligned",
+    "AlignedStruct",
+    "Array",
+    "BFloat32",
+    "BFloat64",
+    "Bit",
+    "BitField",
+    "BitStruct",
+    "Bitwise",
+    "CString",
+    "Embedded",
+    "EmbeddedBitStruct",
+    "Enum",
+    "Field",
+    "Flag",
+    "FlagsEnum",
+    "GreedyRange",
+    "If",
+    "IfThenElse",
+    "LFloat32",
+    "LFloat64",
+    "Magic",
+    "NFloat32",
+    "NFloat64",
+    "Nibble",
+    "Octet",
+    "OnDemandPointer",
+    "OpenRange",
+    "Optional",
+    "OptionalGreedyRange",
+    "Padding",
+    "PascalString",
+    "PrefixedArray",
+    "Rename",
+    "SBInt8",
+    "SBInt16",
+    "SBInt32",
+    "SBInt64",
+    "SLInt8",
+    "SLInt16",
+    "SLInt32",
+    "SLInt64",
+    "SNInt8",
+    "SNInt16",
+    "SNInt32",
+    "SNInt64",
+    "SeqOfOne",
+    "String",
+    "SymmetricMapping",
+    "UBInt8",
+    "UBInt16",
+    "UBInt32",
+    "UBInt64",
+    "ULInt8",
+    "ULInt16",
+    "ULInt32",
+    "ULInt64",
+    "UNInt8",
+    "UNInt16",
+    "UNInt32",
+    "UNInt64",
 ]
 
 
@@ -285,7 +355,10 @@ def Array(count: Length, subcon: Construct) -> MetaArray:
         con = MetaArray(count, subcon)
     return con
 
-def PrefixedArray(subcon: Construct, length_field: Construct = UBInt8("length")) -> LengthValueAdapter:
+def PrefixedArray(
+    subcon: Construct,
+    length_field: Construct = UBInt8("length"),  # noqa: B008 - public API default
+) -> LengthValueAdapter:
     """an array prefixed by a length field.
     * subcon - the subcon to be repeated
     * length_field - a construct returning an integer
@@ -448,7 +521,7 @@ def SymmetricMapping(subcon: Construct, mapping: Mapping[Any, Any], default: Has
       default value is given, and exception is raised. setting to Pass would
       return the value "as is" (unmapped)
     """
-    reversed_mapping = dict((v, k) for k, v in mapping.items())
+    reversed_mapping = {v: k for k, v in mapping.items()}
     return MappingAdapter(subcon,
         encoding = mapping,
         decoding = reversed_mapping,
@@ -542,7 +615,11 @@ def String(name: str, length: int, encoding: str | None = None, padchar: bytes |
             trimdir=trimdir)
     return con
 
-def PascalString(name: str, length_field: FormatField[int] = UBInt8("length"), encoding: str | None = None) -> StringAdapter:
+def PascalString(
+    name: str,
+    length_field: FormatField[int] = UBInt8("length"),  # noqa: B008 - public API
+    encoding: str | None = None,
+) -> StringAdapter:
     r"""
     A length-prefixed string.
 
@@ -581,7 +658,8 @@ def PascalString(name: str, length_field: FormatField[int] = UBInt8("length"), e
     )
 
 def CString(name: str, terminators: bytes = b"\x00", encoding: str | None = None,
-        char_field: Construct = Field(None, 1)) -> Reconfig:
+        char_field: Construct = Field(None, 1),  # noqa: B008 - public API default
+        ) -> Reconfig:
     r"""
     A string ending in a terminator.
 

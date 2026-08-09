@@ -6,8 +6,8 @@
 # Eli Bendersky (eliben@gmail.com)
 # This code is in the public domain
 #-------------------------------------------------------------------------------
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from elftools.elf.elffile import ELFFile
 
@@ -31,15 +31,15 @@ def process_file(filename):
             # computed attributes (such as its offset in the section) and
             # a header which conforms to the DWARF standard. The access to
             # header elements is, as usual, via item-lookup.
-            print('  Found a compile unit at offset %s, length %s' % (
+            print('  Found a compile unit at offset {}, length {}'.format(
                 CU.cu_offset, CU['unit_length']))
 
             # The first DIE in each compile unit describes it.
             top_DIE = CU.get_top_DIE()
-            print('    Top DIE with tag=%s' % top_DIE.tag)
+            print(f'    Top DIE with tag={top_DIE.tag}')
 
             # We're interested in the filename...
-            print('    name=%s' % Path(top_DIE.get_full_path()).as_posix())
+            print(f'    name={Path(top_DIE.get_full_path()).as_posix()}')
 
 if __name__ == '__main__':
     if sys.argv[1] == '--test':

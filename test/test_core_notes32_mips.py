@@ -4,8 +4,8 @@
 # Lukas Dresel (lukas.dresel@cs.ucsb.edu)
 # This code is in the public domain
 #------------------------------------------------------------------------------
-import unittest
 import os
+import unittest
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.segments import NoteSegment
@@ -20,7 +20,7 @@ class TestCoreNotes(unittest.TestCase):
     """
     @classmethod
     def setUpClass(cls):
-       cls._core_file = open(os.path.join('test',
+       cls._core_file = open(os.path.join('test',  # noqa: SIM115
                              'testfiles_for_unittests', 'core_linux32_qemu_mips.elf'),
                              'rb')
 

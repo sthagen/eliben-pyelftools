@@ -12,21 +12,20 @@ from bisect import bisect_right
 from functools import cached_property
 from typing import IO, TYPE_CHECKING, NamedTuple
 
-from ..construct.lib.container import Container
 from ..common.exceptions import DWARFError
-from ..common.utils import (struct_parse, dwarf_assert,
-                            parse_cstring_from_stream)
-from .structs import DWARFStructs
-from .compileunit import CompileUnit
-from .typeunit import TypeUnit
+from ..common.utils import dwarf_assert, parse_cstring_from_stream, struct_parse
+from ..construct.lib.container import Container
 from .abbrevtable import AbbrevTable
-from .lineprogram import LineProgram
-from .callframe import CallFrameInfo
-from .locationlists import LocationLists, LocationListsPair
-from .ranges import RangeLists, RangeListsPair
 from .aranges import ARanges
-from .namelut import NameLUT
+from .callframe import CallFrameInfo
+from .compileunit import CompileUnit
 from .dwarf_util import _get_base_offset
+from .lineprogram import LineProgram
+from .locationlists import LocationLists, LocationListsPair
+from .namelut import NameLUT
+from .ranges import RangeLists, RangeListsPair
+from .structs import DWARFStructs
+from .typeunit import TypeUnit
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -214,7 +213,7 @@ class DWARFInfo:
         """
         tu = self._type_units_by_sig.get(sig8)
         if tu is None:
-            raise KeyError("Signature %016x not found in .debug_types" % sig8)
+            raise KeyError(f"Signature {sig8:016x} not found in .debug_types")
         return tu._get_cached_DIE(tu.tu_offset + tu['type_offset'])
 
     def get_CU_containing(self, refaddr: int) -> CompileUnit:
@@ -236,7 +235,7 @@ class DWARFInfo:
         assert self.debug_info_sec is not None
         dwarf_assert(
             0 <= refaddr < self.debug_info_sec.size,
-            "refaddr %s beyond .debug_info size" % refaddr)
+            f"refaddr {refaddr} beyond .debug_info size")
 
         # The CU containing the DIE we desire will be to the right of the
         # DIE insert point.  If we have a CU address, then it will be a
@@ -250,7 +249,7 @@ class DWARFInfo:
             if cu.cu_offset <= refaddr < cu.cu_offset + cu.size:
                 return cu
 
-        raise ValueError("CU for reference address %s not found" % refaddr)
+        raise ValueError(f"CU for reference address {refaddr} not found")
 
     def get_CU_at(self, offset: int) -> CompileUnit:
         """ Given a CU header offset, return the parsed CU.
@@ -269,7 +268,7 @@ class DWARFInfo:
         assert self.debug_info_sec is not None
         dwarf_assert(
             0 <= offset < self.debug_info_sec.size,
-            "offset %s beyond .debug_info size" % offset)
+            f"offset {offset} beyond .debug_info size")
 
         return self._cached_CU_at_offset(offset)
 
@@ -285,7 +284,7 @@ class DWARFInfo:
         """
         tu = self._type_units_by_sig.get(sig8)
         if tu is None:
-            raise KeyError("Signature %016x not found in .debug_types" % sig8)
+            raise KeyError(f"Signature {sig8:016x} not found in .debug_types")
         return tu
 
     def iter_CUs(self) -> Iterator[CompileUnit]:
@@ -313,7 +312,7 @@ class DWARFInfo:
         assert self.debug_abbrev_sec is not None
         dwarf_assert(
             offset < self.debug_abbrev_sec.size,
-            "Offset '0x%x' to abbrev table out of section bounds" % offset)
+            f"Offset '0x{offset:x}' to abbrev table out of section bounds")
         if offset not in self._abbrevtable_cache:
             self._abbrevtable_cache[offset] = AbbrevTable(
                 structs=self.structs,
@@ -608,7 +607,7 @@ class DWARFInfo:
         cu_die_offset = self.debug_info_sec.stream.tell()
         dwarf_assert(
             self._is_supported_version(cu_header['version']),
-            "Expected supported DWARF version. Got '%s'" % cu_header['version'])
+            "Expected supported DWARF version. Got '{}'".format(cu_header['version']))
         return CompileUnit(
                 header=cu_header,
                 dwarfinfo=self,
@@ -654,7 +653,7 @@ class DWARFInfo:
         tu_die_offset = self.debug_types_sec.stream.tell()
         dwarf_assert(
             self._is_supported_version(tu_header['version']),
-            "Expected supported DWARF version. Got '%s'" % tu_header['version'])
+            "Expected supported DWARF version. Got '{}'".format(tu_header['version']))
         return TypeUnit(
             header=tu_header,
             dwarfinfo=self,
@@ -720,11 +719,7 @@ class DWARFInfo:
             lineprog_header.include_directory = tuple(d.DW_LNCT_path for d in lineprog_header.directories)
         if lineprog_header.get('file_names', False):
             lineprog_header.file_entry = tuple(
-                Container(**{
-                    'name':e.get('DW_LNCT_path'),
-                    'dir_index': e.get('DW_LNCT_directory_index'),
-                    'mtime': e.get('DW_LNCT_timestamp'),
-                    'length': e.get('DW_LNCT_size')})
+                Container(name=e.get('DW_LNCT_path'), dir_index=e.get('DW_LNCT_directory_index'), mtime=e.get('DW_LNCT_timestamp'), length=e.get('DW_LNCT_size'))
                 for e in lineprog_header.file_names)
 
         # Calculate the offset to the next line program (see DWARF 6.2.4)

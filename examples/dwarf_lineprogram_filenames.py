@@ -8,9 +8,9 @@
 # William Woodruff (william@yossarian.net)
 # This code is in the public domain
 #-------------------------------------------------------------------------------
-from collections import defaultdict
-import sys
 import posixpath
+import sys
+from collections import defaultdict
 
 from elftools.elf.elffile import ELFFile
 
@@ -26,7 +26,7 @@ def process_file(filename):
 
         dwarfinfo = elffile.get_dwarf_info()
         for CU in dwarfinfo.iter_CUs():
-            print('  Found a compile unit at offset %s, length %s' % (
+            print('  Found a compile unit at offset {}, length {}'.format(
                 CU.cu_offset, CU['unit_length']))
 
             # Every compilation unit in the DWARF information may or may not
@@ -59,7 +59,7 @@ def line_entry_mapping(line_program):
         filename_map[filename] += 1
 
     for filename, lpe_count in filename_map.items():
-        print("    filename=%s -> %d entries" % (filename, lpe_count))
+        print(f"    filename={filename} -> {int(lpe_count)} entries")
 
 
 def lpe_filename(line_program, file_index):

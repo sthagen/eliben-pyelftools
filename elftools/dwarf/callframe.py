@@ -15,13 +15,12 @@ from typing import IO, TYPE_CHECKING, Any, Literal, NamedTuple, cast
 from warnings import warn
 
 from ..common.exceptions import DWARFError
-from ..common.utils import (
-    struct_parse, dwarf_assert, preserve_stream_pos)
+from ..common.utils import dwarf_assert, preserve_stream_pos, struct_parse
 from ..construct import Struct, Switch
 from ..construct.lib.container import Container
+from .constants import DW_CFA
 from .enums import DW_EH_encoding_flags
 from .structs import DWARFStructs
-from .constants import DW_CFA
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -318,7 +317,7 @@ class CallFrameInfo:
         # Augmentation parsing works in minimal mode here: we need the length
         # field to be able to skip unhandled augmentation fields.
         assert augmentation.startswith(b'z'), (
-            'Unhandled augmentation string: {}'.format(repr(augmentation)))
+            f'Unhandled augmentation string: {augmentation!r}')
 
         available_fields: dict[str, Construct | Literal[True]] = {
             'z': entry_structs.Dwarf_uleb128('length'),
@@ -404,7 +403,7 @@ class CallFrameInfo:
             ptr += self.address + stream_offset
 
         else:
-            assert False, 'Unsupported encoding modifier for LSDA pointer: {:#x}'.format(modifier)
+            assert False, f'Unsupported encoding modifier for LSDA pointer: {modifier:#x}'
 
         return ptr
 
@@ -451,7 +450,7 @@ class CallFrameInfo:
             result['initial_location'] += (
                 self.address + initial_location_offset)
         else:
-            assert False, 'Unsupported encoding: {:#x}'.format(encoding)
+            assert False, f'Unsupported encoding: {encoding:#x}'
 
         return result
 
@@ -559,7 +558,7 @@ class CFIEntry:
         if isinstance(self, CIE):
             # For a CIE, initialize cur_line to an "empty" line
             cie = self
-            cur_line: Line = dict(pc=0, cfa=CFARule(reg=None, offset=0))
+            cur_line: Line = {'pc': 0, 'cfa': CFARule(reg=None, offset=0)}
             reg_order = []
         else: # FDE
             # For a FDE, we need to decode the attached CIE first, because its
@@ -573,7 +572,7 @@ class CFIEntry:
                 last_line_in_CIE = copy.copy(cie_decoded_table.table[-1])
                 cur_line = dict(last_line_in_CIE, pc=pc)
             else:
-                cur_line = dict(cfa=CFARule(reg=None, offset=0), pc=pc)
+                cur_line = {'cfa': CFARule(reg=None, offset=0), 'pc': pc}
             reg_order = copy.copy(cie_decoded_table.reg_order)
 
         table: list[Line] = []
@@ -735,7 +734,7 @@ class RegisterRule:
         self.arg = arg
 
     def __repr__(self) -> str:
-        return 'RegisterRule(%s, %s)' % (self.type, self.arg)
+        return f'RegisterRule({self.type}, {self.arg})'
 
 
 class CFARule:
@@ -753,8 +752,7 @@ class CFARule:
         self.expr = expr
 
     def __repr__(self) -> str:
-        return 'CFARule(reg=%s, offset=%s, expr=%s)' % (
-            self.reg, self.offset, self.expr)
+        return f'CFARule(reg={self.reg}, offset={self.offset}, expr={self.expr})'
 
 
 # Represents the decoded CFI for an entry, which is just a large table,

@@ -8,13 +8,13 @@
 #-------------------------------------------------------------------------------
 from __future__ import annotations
 
-import os
 import binascii
+import os
 from typing import IO, TYPE_CHECKING, Any
 
-from ..construct.macros import Array
 from ..common.exceptions import DWARFError
 from ..common.utils import preserve_stream_pos, struct_parse
+from ..construct.macros import Array
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -32,7 +32,7 @@ def _get_base_offset(cu: CompileUnit | TypeUnit, base_attribute_name: str) -> in
     """
     cu_top_die = cu.get_top_DIE()
     if base_attribute_name not in cu_top_die.attributes:
-        raise DWARFError("The CU at offset 0x%x needs %s" % (cu.cu_offset, base_attribute_name))
+        raise DWARFError(f"The CU at offset 0x{cu.cu_offset:x} needs {base_attribute_name}")
     return cu_top_die.attributes[base_attribute_name].value
 
 def _resolve_via_offset_table(

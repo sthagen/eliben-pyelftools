@@ -17,24 +17,29 @@ from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any
 
 from ..common.exceptions import ELFError, ELFParseError
-from ..common.utils import struct_parse, elf_assert
-from .structs import ELFStructs
-from .sections import (
-        Section, StringTableSection, SymbolTableSection,
-        SymbolTableIndexSection, SUNWSyminfoTableSection, NullSection,
-        NoteSection, StabSection, ARMAttributesSection, RISCVAttributesSection)
-from .dynamic import DynamicSection, DynamicSegment
-from .relocation import (RelocationSection, RelocationHandler,
-        RelrRelocationSection)
-from .gnuversions import (
-        GNUVerNeedSection, GNUVerDefSection,
-        GNUVerSymSection)
-from .segments import Segment, InterpSegment, NoteSegment
-from ..dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
-from ..ehabi.ehabiinfo import EHABIInfo
-from .hash import ELFHashSection, GNUHashSection
-from .constants import SHN_INDICES
+from ..common.utils import elf_assert, struct_parse
 from ..dwarf.dwarf_util import _file_crc32
+from ..dwarf.dwarfinfo import DebugSectionDescriptor, DwarfConfig, DWARFInfo
+from ..ehabi.ehabiinfo import EHABIInfo
+from .constants import SHN_INDICES
+from .dynamic import DynamicSection, DynamicSegment
+from .gnuversions import GNUVerDefSection, GNUVerNeedSection, GNUVerSymSection
+from .hash import ELFHashSection, GNUHashSection
+from .relocation import RelocationHandler, RelocationSection, RelrRelocationSection
+from .sections import (
+    ARMAttributesSection,
+    NoteSection,
+    NullSection,
+    RISCVAttributesSection,
+    Section,
+    StabSection,
+    StringTableSection,
+    SUNWSyminfoTableSection,
+    SymbolTableIndexSection,
+    SymbolTableSection,
+)
+from .segments import InterpSegment, NoteSegment, Segment
+from .structs import ELFStructs
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -110,7 +115,8 @@ class ELFFile:
         ELFFile from it, setting up a stream_loader that resolves linked files
         using normalized string paths relative to the original file.
         """
-        stream = open(path, 'rb')
+        # The returned ELFFile owns this stream for its own lifetime.
+        stream = open(path, 'rb')  # noqa: SIM115
         return ELFFile(stream, ELFFile.make_relative_loader(os.fsdecode(path)))
 
     @staticmethod
@@ -166,7 +172,7 @@ class ELFFile:
         """
         section_header = self._get_section_header(n)
         if type and section_header.sh_type not in type:
-            raise ELFError("Unexpected section type %s, expected %s" % (section_header['sh_type'], type))
+            raise ELFError("Unexpected section type {}, expected {}".format(section_header['sh_type'], type))
         return self._make_section(section_header)
 
     def _get_linked_symtab_section(self, n: int) -> SymbolTableSection:
@@ -176,7 +182,7 @@ class ELFFile:
         """
         section_header = self._get_section_header(n)
         if section_header['sh_type'] not in ('SHT_SYMTAB', 'SHT_DYNSYM'):
-            raise ELFError("Section points at section %d of type %s, expected SHT_SYMTAB/SHT_DYNSYM" % (n, section_header['sh_type']))
+            raise ELFError(f"Section points at section {int(n)} of type {section_header['sh_type']}, expected SHT_SYMTAB/SHT_DYNSYM")
         section = self._make_section(section_header)
         assert isinstance(section, SymbolTableSection)
         return section
@@ -188,7 +194,7 @@ class ELFFile:
         """
         section_header = self._get_section_header(n)
         if section_header['sh_type'] != 'SHT_STRTAB':
-            raise ELFError("SHT_SYMTAB section points at section %d of type %s, expected SHT_STRTAB" % (n, section_header['sh_type']))
+            raise ELFError(f"SHT_SYMTAB section points at section {int(n)} of type {section_header['sh_type']}, expected SHT_STRTAB")
         section = self._make_section(section_header)
         assert isinstance(section, StringTableSection)
         return section
@@ -664,7 +670,7 @@ class ELFFile:
         elif ei_class == b'\x02':
             self.elfclass = 64
         else:
-            raise ELFError('Invalid EI_CLASS %s' % repr(ei_class))
+            raise ELFError(f'Invalid EI_CLASS {ei_class!r}')
 
         ei_data = self.stream.read(1)
         if ei_data == b'\x01':
@@ -672,14 +678,14 @@ class ELFFile:
         elif ei_data == b'\x02':
             self.little_endian = False
         else:
-            raise ELFError('Invalid EI_DATA %s' % repr(ei_data))
+            raise ELFError(f'Invalid EI_DATA {ei_data!r}')
 
     def _section_offset(self, n: int) -> int:
         """ Compute the offset of section #n in the file
         """
         shentsize = self['e_shentsize']
         if self['e_shoff'] > 0 and shentsize < self.structs.Elf_Shdr.sizeof():
-            raise ELFError('Too small e_shentsize: %s' % shentsize)
+            raise ELFError(f'Too small e_shentsize: {shentsize}')
         return self['e_shoff'] + n * shentsize
 
     def _segment_offset(self, n: int) -> int:
@@ -687,7 +693,7 @@ class ELFFile:
         """
         phentsize = self['e_phentsize']
         if self['e_phoff'] > 0 and phentsize < self.structs.Elf_Phdr.sizeof():
-            raise ELFError('Too small e_phentsize: %s' % phentsize)
+            raise ELFError(f'Too small e_phentsize: {phentsize}')
         return self['e_phoff'] + n * phentsize
 
     def _make_segment(self, segment_header: Container) -> Segment:
@@ -934,7 +940,7 @@ class ELFFile:
         # big-endian order
         compression_type = section.stream.read(4)
         assert compression_type == b'ZLIB', \
-            'Invalid compression type: %r' % (compression_type)
+            f'Invalid compression type: {compression_type!r}'
 
         uncompressed_size = struct.unpack('>Q', section.stream.read(8))[0]
 
@@ -950,9 +956,7 @@ class ELFFile:
         uncompressed_stream.seek(0, io.SEEK_END)
         size = uncompressed_stream.tell()
         assert uncompressed_size == size, \
-                'Wrong uncompressed size: expected %r, but got %r' % (
-                    uncompressed_size, size,
-                )
+                f'Wrong uncompressed size: expected {uncompressed_size!r}, but got {size!r}'
 
         return section._replace(stream=uncompressed_stream, size=size)
 

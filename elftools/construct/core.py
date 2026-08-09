@@ -4,7 +4,7 @@ from io import BytesIO
 from struct import Struct as Packer
 from typing import IO, TYPE_CHECKING, Any, Final, Generic, Literal, NoReturn, TypeVar
 
-from .lib import Container, ListContainer, LazyContainer
+from .lib import Container, LazyContainer, ListContainer
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
@@ -17,14 +17,42 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 __all__ = [
-    "ConstructError", "FieldError", "SizeofError", "AdaptationError", "ArrayError", "RangeError", "SwitchError", "SelectError", "TerminatorError",
-    "Construct", "Subconstruct", "Adapter",
-    "StaticField", "FormatField", "MetaField", "MetaArray", "Range", "RepeatUntil",
-    "Struct", "Sequence", "Union",
-    "Switch", "Select",
-    "Pointer", "Peek", "OnDemand", "Buffered", "Restream",
-    "Reconfig", "Anchor", "Value", "LazyBound",
-    "_Pass", "Pass", "_Terminator", "Terminator",
+    "AdaptationError",
+    "Adapter",
+    "Anchor",
+    "ArrayError",
+    "Buffered",
+    "Construct",
+    "ConstructError",
+    "FieldError",
+    "FormatField",
+    "LazyBound",
+    "MetaArray",
+    "MetaField",
+    "OnDemand",
+    "Pass",
+    "Peek",
+    "Pointer",
+    "Range",
+    "RangeError",
+    "Reconfig",
+    "RepeatUntil",
+    "Restream",
+    "Select",
+    "SelectError",
+    "Sequence",
+    "SizeofError",
+    "StaticField",
+    "Struct",
+    "Subconstruct",
+    "Switch",
+    "SwitchError",
+    "Terminator",
+    "TerminatorError",
+    "Union",
+    "Value",
+    "_Pass",
+    "_Terminator",
 ]
 
 
@@ -113,7 +141,7 @@ class Construct:
     FLAG_EMBED                 = 0x0004
     FLAG_NESTING               = 0x0008
 
-    __slots__ = ("name", "conflags")
+    __slots__ = ("conflags", "name")
     def __init__(self, name: str | None, flags: int = 0) -> None:
         if name is not None:
             if type(name) is not str:
@@ -124,7 +152,7 @@ class Construct:
         self.conflags = flags
 
     def __repr__(self) -> str:
-        return "%s(%r)" % (self.__class__.__name__, self.name)
+        return f"{self.__class__.__name__}({self.name!r})"
 
     def _set_flag(self, flag: int) -> None:
         """
@@ -255,7 +283,7 @@ class Construct:
             context = Container()
         try:
             return self._sizeof(context)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - wrap all construct failures
             raise SizeofError(e)
 
     def _sizeof(self, context: Container) -> int:
@@ -310,14 +338,14 @@ def _read_stream(stream: IO[bytes], length: int) -> bytes:
         raise ValueError("length must be >= 0", length)
     data = stream.read(length)
     if len(data) != length:
-        raise FieldError("expected %d, found %d" % (length, len(data)))
+        raise FieldError(f"expected {int(length)}, found {len(data)}")
     return data
 
 def _write_stream(stream: IO[bytes], length: int, data: bytes) -> None:
     if length < 0:
         raise ValueError("length must be >= 0", length)
     if len(data) != length:
-        raise FieldError("expected %d, found %d" % (length, len(data)))
+        raise FieldError(f"expected {int(length)}, found {len(data)}")
     stream.write(data)
 
 class StaticField(Construct):
@@ -371,12 +399,12 @@ class FormatField(StaticField, Generic[_T]):
     def _parse(self, stream: IO[bytes], context: Container) -> _T:
         try:
             return self.packer.unpack(_read_stream(stream, self.length))[0]
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001 - normalize struct failures
             raise FieldError(ex)
     def _build(self, obj: _T, stream: IO[bytes], context: Container) -> None:
         try:
             _write_stream(stream, self.length, self.packer.pack(obj))
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001 - normalize struct failures
             raise FieldError(ex)
 
 class MetaField(Construct):
@@ -449,12 +477,12 @@ class MetaArray(Subconstruct):
                     obj.append(self.subcon._parse(stream, context))
                     c += 1
         except ConstructError as ex:
-            raise ArrayError("expected %d, found %d" % (count, c), ex)
+            raise ArrayError(f"expected {int(count)}, found {int(c)}", ex)
         return obj
     def _build(self, obj: Any, stream: IO[bytes], context: Container) -> None:
         count = self.countfunc(context)
         if len(obj) != count:
-            raise ArrayError("expected %d, found %d" % (count, len(obj)))
+            raise ArrayError(f"expected {int(count)}, found {len(obj)}")
         if self.subcon.conflags & self.FLAG_COPY_CONTEXT:
             for subobj in obj:
                 self.subcon._build(subobj, stream, context.__copy__())
@@ -508,7 +536,7 @@ class Range(Subconstruct):
     RangeError: expected 3..7, found 8
     """
 
-    __slots__ = ("mincount", "maxcout")
+    __slots__ = ("maxcout", "mincount")
     def __init__(self, mincount: int, maxcout: int, subcon: Construct) -> None:
         Subconstruct.__init__(self, subcon)
         self.mincount = mincount
@@ -531,14 +559,17 @@ class Range(Subconstruct):
                     c += 1
         except ConstructError as ex:
             if c < self.mincount:
-                raise RangeError("expected %d to %d, found %d" %
-                    (self.mincount, self.maxcout, c), ex)
+                raise RangeError(
+                    f"expected {self.mincount:d} to {self.maxcout:d}, found {c:d}",
+                    ex,
+                )
             stream.seek(pos)
         return obj
     def _build(self, obj: Any, stream: IO[bytes], context: Container) -> None:
         if len(obj) < self.mincount or len(obj) > self.maxcout:
-            raise RangeError("expected %d to %d, found %d" %
-                (self.mincount, self.maxcout, len(obj)))
+            raise RangeError(
+                f"expected {self.mincount:d} to {self.maxcout:d}, found {len(obj):d}"
+            )
         cnt = 0
         try:
             if self.subcon.conflags & self.FLAG_COPY_CONTEXT:
@@ -555,8 +586,11 @@ class Range(Subconstruct):
                     cnt += 1
         except ConstructError as ex:
             if cnt < self.mincount:
-                raise RangeError("expected %d to %d, found %d" %
-                    (self.mincount, self.maxcout, len(obj)), ex)
+                raise RangeError(
+                    f"expected {self.mincount:d} to {self.maxcout:d}, "
+                    f"found {len(obj):d}",
+                    ex,
+                )
     def _sizeof(self, context: Container) -> int:
         raise SizeofError("can't calculate size")
 
@@ -646,7 +680,7 @@ class Struct(Construct):
         UBInt8("third_element"),
     )
     """
-    __slots__ = ("subcons", "nested",)
+    __slots__ = ("nested", "subcons")
     def __init__(self, name: str | None, *subcons: Construct, nested: bool = True) -> None:
         self.nested = nested
         Construct.__init__(self, name)
@@ -773,7 +807,7 @@ class Union(Construct):
         ),
     )
     """
-    __slots__ = ("parser", "builder")
+    __slots__ = ("builder", "parser")
     def __init__(self, name: str | None, master: Construct, *subcons: Construct) -> None:
         Construct.__init__(self, name)
         args: list[Construct] = [Peek(sc) for sc in subcons]
@@ -831,7 +865,7 @@ class Switch(Construct, Generic[_T]):
             raise SwitchError("no default case defined")
     NoDefault: Final = _NoDefault("No default value specified")
 
-    __slots__ = ("subcons", "keyfunc", "cases", "default", "include_key")
+    __slots__ = ("cases", "default", "include_key", "keyfunc", "subcons")
 
     def __init__(self, name: str | None, keyfunc: Callable[[Container], _T], cases: Mapping[_T, Construct], default: Construct = NoDefault,
             include_key: bool = False) -> None:
@@ -885,7 +919,7 @@ class Select(Construct):
         UBInt8("tiny"),
     )
     """
-    __slots__ = ("subcons", "include_name")
+    __slots__ = ("include_name", "subcons")
     def __init__(self, name: str | None, *subcons: Construct, include_name: bool = False) -> None:
         Construct.__init__(self, name)
         self.subcons = subcons
@@ -921,7 +955,7 @@ class Select(Construct):
                 context2 = context.__copy__()
                 try:
                     sc._build(obj, stream2, context2)
-                except Exception:
+                except Exception:  # noqa: BLE001, S110 - try the next construct
                     pass
                 else:
                     context.update(context2)
@@ -1079,7 +1113,7 @@ class Buffered(Subconstruct):
         resizer = lambda size: size / 8,
     )
     """
-    __slots__ = ("encoder", "decoder", "resizer")
+    __slots__ = ("decoder", "encoder", "resizer")
     def __init__(self, subcon: Construct, decoder: Callable[[bytes], bytes], encoder: Callable[[bytes], bytes], resizer: Callable[[int], int]) -> None:
         Subconstruct.__init__(self, subcon)
         self.encoder = encoder
@@ -1129,7 +1163,7 @@ class Restream(Subconstruct):
         resizer = lambda size: size / 8,
     )
     """
-    __slots__ = ("stream_reader", "stream_writer", "resizer")
+    __slots__ = ("resizer", "stream_reader", "stream_writer")
     def __init__(self, subcon: Construct, stream_reader: type[BitStream], stream_writer: type[BitStream], resizer: Callable[[int], int]) -> None:
         Subconstruct.__init__(self, subcon)
         self.stream_reader = stream_reader
