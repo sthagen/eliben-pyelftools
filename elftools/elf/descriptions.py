@@ -129,8 +129,8 @@ def describe_sh_flags(x: int) -> str:
             SH_FLAGS.SHF_WRITE, SH_FLAGS.SHF_ALLOC, SH_FLAGS.SHF_EXECINSTR,
             SH_FLAGS.SHF_MERGE, SH_FLAGS.SHF_STRINGS, SH_FLAGS.SHF_INFO_LINK,
             SH_FLAGS.SHF_LINK_ORDER, SH_FLAGS.SHF_OS_NONCONFORMING,
-            SH_FLAGS.SHF_GROUP, SH_FLAGS.SHF_TLS, SH_FLAGS.SHF_MASKOS,
-            SH_FLAGS.SHF_EXCLUDE):
+            SH_FLAGS.SHF_GROUP, SH_FLAGS.SHF_TLS, SH_FLAGS.SHF_COMPRESSED,
+            SH_FLAGS.SHF_MASKOS, SH_FLAGS.SHF_EXCLUDE):
         s += _DESCR_SH_FLAGS[flag] if (x & flag) else ''
     if not x & SH_FLAGS.SHF_EXCLUDE and x & SH_FLAGS.SHF_MASKPROC:
         s += 'p'
@@ -465,7 +465,7 @@ _DESCR_P_TYPE = {
     "PT_GNU_RELRO": 'GNU_RELRO',
     "PT_GNU_PROPERTY": 'GNU_PROPERTY',
     "PT_ARM_ARCHEXT": 'ARM_ARCHEXT',
-    "PT_ARM_EXIDX": 'EXIDX',  # binutils calls this EXIDX, not ARM_EXIDX
+    "PT_ARM_EXIDX": 'ARM_EXIDX',
     "PT_AARCH64_ARCHEXT": 'AARCH64_ARCHEXT',
     "PT_AARCH64_UNWIND": 'AARCH64_UNWIND',
     "PT_TLS": 'TLS',
@@ -502,6 +502,7 @@ _DESCR_SH_TYPE = {
     "SHT_GROUP": 'GROUP',
     "SHT_SYMTAB_SHNDX": 'SYMTAB SECTION INDICIES',
     "SHT_RELR": 'RELR',
+    "SHT_LLVM_ADDRSIG": 'LLVM_ADDRSIG',
     "SHT_GNU_verdef": 'VERDEF',
     "SHT_GNU_verneed": 'VERNEED',
     "SHT_GNU_versym": 'VERSYM',
@@ -563,6 +564,7 @@ _DESCR_SH_FLAGS = {
     SH_FLAGS.SHF_OS_NONCONFORMING: 'O',
     SH_FLAGS.SHF_GROUP: 'G',
     SH_FLAGS.SHF_TLS: 'T',
+    SH_FLAGS.SHF_COMPRESSED: 'C',
     SH_FLAGS.SHF_MASKOS: 'o',
     SH_FLAGS.SHF_EXCLUDE: 'E',
 }
@@ -719,8 +721,9 @@ _DESCR_NOTE_GNU_PROPERTY_AARCH64_FEATURE_1_AND = (
 )
 
 _DESCR_NOTE_GNU_PROPERTY_RISCV_FEATURE_1_AND = (
-    (1, 'ZICFILP'),
-    (2, 'ZICFISS'),
+    (1, 'CFI_LP_UNLABELED'),
+    (2, 'CFI_SS'),
+    (4, 'CFI_LP_FUNC_SIG'),
 )
 
 def _reverse_dict(d: Mapping[_K, _V], low_priority: TContainer[_K] = ()) -> dict[_V, _K]:
